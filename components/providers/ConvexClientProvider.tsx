@@ -1,4 +1,4 @@
-// src/components/providers/ConvexClientProvider.tsx
+// components/providers/ConvexClientProvider.tsx
 "use client";
 
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
