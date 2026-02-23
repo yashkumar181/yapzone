@@ -68,3 +68,51 @@ export const remove = mutation({
     }
   },
 });
+
+// Add to the bottom of convex/messages.ts
+
+export const react = mutation({
+  args: {
+    messageId: v.id("messages"),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const msg = await ctx.db.get(args.messageId);
+    if (!msg) throw new Error("Message not found");
+
+    const currentReactions = msg.reactions || [];
+    const myId = identity.subject;
+
+    // 1. Get ONLY my current reactions (preserves the order I added them)
+    const myReactions = currentReactions.filter((r) => r.userId === myId);
+
+    // 2. Check if I already reacted with THIS specific emoji
+    const hasReactedWithThisEmoji = myReactions.some((r) => r.emoji === args.emoji);
+
+    let newReactions = [...currentReactions];
+
+    if (hasReactedWithThisEmoji) {
+      // TOGGLE OFF: Remove this specific emoji for this user
+      newReactions = newReactions.filter(
+        (r) => !(r.userId === myId && r.emoji === args.emoji)
+      );
+    } else {
+      // TOGGLE ON: Add the new emoji
+      if (myReactions.length >= 2) {
+        // I already have 2 reactions! Remove my oldest one first.
+        const oldestEmojiOfMine = myReactions[0].emoji;
+        newReactions = newReactions.filter(
+          (r) => !(r.userId === myId && r.emoji === oldestEmojiOfMine)
+        );
+      }
+      
+      // Add the new reaction to the end
+      newReactions.push({ userId: myId, emoji: args.emoji });
+    }
+
+    await ctx.db.patch(args.messageId, { reactions: newReactions });
+  },
+});

@@ -27,6 +27,14 @@ export default defineSchema({
     content: v.string(),
     isDeleted: v.optional(v.boolean()), // NEW: Soft delete flag
     deletedFor: v.optional(v.array(v.string())),
+    reactions: v.optional(
+      v.array(
+        v.object({
+          userId: v.string(),
+          emoji: v.string(),
+        })
+      )
+    ),
   }).index("by_conversationId", ["conversationId"]),
  
   // NEW: Track who is typing, where, and when it expires
