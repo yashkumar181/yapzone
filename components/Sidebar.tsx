@@ -39,7 +39,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   };
 
   return (
-    <div className="w-80 h-screen border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+    // UPDATED: Changed w-80 h-screen to w-full h-full
+    <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col">
       <div className="p-4 border-b flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Chats</h2>

@@ -32,13 +32,25 @@ export default function Home() {
     setActiveChatName(otherUserName);
   };
 
+  // NEW: Function to clear the active chat, throwing us back to the Sidebar on mobile
+  const handleCloseChat = () => {
+    setActiveChatId(null);
+    setActiveChatName(null);
+  };
+
   if (!isLoaded) return null;
 
   return (
     <main className="flex h-screen bg-white dark:bg-black overflow-hidden">
-      <Sidebar onSelectChat={handleSelectChat} />
+      {/* Sidebar Container */}
+      {/* Hidden on mobile IF a chat is active. Fixed width of 80 on desktop. */}
+      <div className={`${activeChatId ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
+        <Sidebar onSelectChat={handleSelectChat} />
+      </div>
 
-      <div className="flex-1 flex flex-col bg-zinc-100 dark:bg-zinc-900">
+      {/* Chat Area Container */}
+      {/* Hidden on mobile IF NO chat is active. Takes remaining width on desktop. */}
+      <div className={`${!activeChatId ? "hidden md:flex" : "flex"} flex-1 flex-col bg-zinc-100 dark:bg-zinc-900`}>
         {!activeChatId ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-900/50">
             <div className="bg-white dark:bg-zinc-950 h-24 w-24 rounded-full flex items-center justify-center shadow-sm mb-6 border">
@@ -53,6 +65,7 @@ export default function Home() {
           <ChatArea 
             conversationId={activeChatId} 
             otherUserName={activeChatName || "Unknown"} 
+            onClose={handleCloseChat} // NEW: Pass the close function
           />
         )}
       </div>
