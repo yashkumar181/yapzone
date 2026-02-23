@@ -12,10 +12,12 @@ import { MessageSquare } from "lucide-react";
 export default function Home() {
   const { user, isLoaded } = useUser();
   const syncUser = useMutation(api.users.syncUser);
+  const updatePresence = useMutation(api.users.updatePresence); // NEW: Get the mutation
   
   const [activeChatId, setActiveChatId] = useState<Id<"conversations"> | null>(null);
   const [activeChatName, setActiveChatName] = useState<string | null>(null);
 
+  // Sync user profile when they log in
   useEffect(() => {
     if (user) {
       syncUser({
@@ -27,12 +29,27 @@ export default function Home() {
     }
   }, [user, syncUser]);
 
+  // NEW: The "Heartbeat" effect to track online status
+  useEffect(() => {
+    if (!user) return;
+
+    // Fire immediately when the page loads
+    updatePresence();
+
+    // Then ping the database every 30 seconds
+    const intervalId = setInterval(() => {
+      updatePresence();
+    }, 30000);
+
+    // Cleanup the interval if the user navigates away or closes the component
+    return () => clearInterval(intervalId);
+  }, [user, updatePresence]);
+
   const handleSelectChat = (conversationId: Id<"conversations">, otherUserName: string) => {
     setActiveChatId(conversationId);
     setActiveChatName(otherUserName);
   };
 
-  // NEW: Function to clear the active chat, throwing us back to the Sidebar on mobile
   const handleCloseChat = () => {
     setActiveChatId(null);
     setActiveChatName(null);
@@ -42,14 +59,10 @@ export default function Home() {
 
   return (
     <main className="flex h-screen bg-white dark:bg-black overflow-hidden">
-      {/* Sidebar Container */}
-      {/* Hidden on mobile IF a chat is active. Fixed width of 80 on desktop. */}
       <div className={`${activeChatId ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
         <Sidebar onSelectChat={handleSelectChat} />
       </div>
 
-      {/* Chat Area Container */}
-      {/* Hidden on mobile IF NO chat is active. Takes remaining width on desktop. */}
       <div className={`${!activeChatId ? "hidden md:flex" : "flex"} flex-1 flex-col bg-zinc-100 dark:bg-zinc-900`}>
         {!activeChatId ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-900/50">
@@ -65,7 +78,7 @@ export default function Home() {
           <ChatArea 
             conversationId={activeChatId} 
             otherUserName={activeChatName || "Unknown"} 
-            onClose={handleCloseChat} // NEW: Pass the close function
+            onClose={handleCloseChat} 
           />
         )}
       </div>

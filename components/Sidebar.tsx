@@ -16,6 +16,13 @@ interface SidebarProps {
   onSelectChat: (conversationId: Id<"conversations">, otherUserName: string) => void;
 }
 
+// NEW: Helper function to determine if a user is online
+// We consider them online if their last heartbeat was less than 1 minute ago (60000 ms)
+const isOnline = (lastSeen?: number) => {
+  if (!lastSeen) return false;
+  return Date.now() - lastSeen < 60000; 
+};
+
 export function Sidebar({ onSelectChat }: SidebarProps) {
   const users = useQuery(api.users.getUsers);
   const conversations = useQuery(api.conversations.list);
@@ -33,7 +40,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     try {
       const conversationId = await getOrCreateConversation({ otherUserId });
       onSelectChat(conversationId, otherUserName);
-      setSearchQuery(""); // Clear search to show the conversation list
+      setSearchQuery(""); 
     } catch (error) {
       console.error("Failed to create chat:", error);
     } finally {
@@ -61,11 +68,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {/* LOGIC: If searching, show User List. If not searching, show Conversation List */}
           {searchQuery ? (
-            // --- SEARCH RESULTS (USERS) ---
             filteredUsers === undefined ? (
-              // Loading State for Search
               Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-2">
                   <Skeleton className="h-10 w-10 rounded-full" />
@@ -92,10 +96,16 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                     onClick={() => handleStartChat(user.clerkId, user.name || "Unknown User")}
                   >
                     <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={user.imageUrl} />
-                        <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
-                      </Avatar>
+                      {/* UPDATED: Avatar with Online Indicator */}
+                      <div className="relative">
+                        <Avatar>
+                          <AvatarImage src={user.imageUrl} />
+                          <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        {isOnline(user.lastSeen) && (
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-zinc-950 rounded-full z-10"></span>
+                        )}
+                      </div>
                       <span className="font-medium text-sm truncate">
                         {user.name}
                       </span>
@@ -108,9 +118,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </>
             )
           ) : (
-            // --- ACTIVE CONVERSATIONS (DEFAULT VIEW) ---
             conversations === undefined ? (
-              // Loading State for Conversations
               Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-2">
                   <Skeleton className="h-10 w-10 rounded-full" />
@@ -134,10 +142,16 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                   className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-left group"
                   onClick={() => onSelectChat(conv._id, conv.otherUser?.name || "Unknown")}
                 >
-                  <Avatar>
-                    <AvatarImage src={conv.otherUser?.imageUrl} />
-                    <AvatarFallback>{conv.otherUser?.name?.charAt(0)}</AvatarFallback>
-                  </Avatar>
+                  {/* UPDATED: Avatar with Online Indicator */}
+                  <div className="relative shrink-0">
+                    <Avatar>
+                      <AvatarImage src={conv.otherUser?.imageUrl} />
+                      <AvatarFallback>{conv.otherUser?.name?.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    {isOnline(conv.otherUser?.lastSeen) && (
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-zinc-800 group-hover:dark:border-zinc-800 rounded-full z-10"></span>
+                    )}
+                  </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
@@ -153,7 +167,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                     
                     <p className="text-xs text-muted-foreground truncate group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors">
                       {conv.lastMessage ? (
-                         // If message is ours, prefix with "You:"
                          (conv.lastMessage.senderId !== conv.otherUser?.clerkId ? "You: " : "") + 
                          conv.lastMessage.content
                       ) : (

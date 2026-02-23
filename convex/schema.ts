@@ -7,6 +7,7 @@ export default defineSchema({
     email: v.string(),
     name: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    lastSeen: v.optional(v.number()),
   }).index("by_clerkId", ["clerkId"]),
 
   // NEW: A table for 1-on-1 chats between two users

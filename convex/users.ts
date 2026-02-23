@@ -48,3 +48,23 @@ export const getUsers = query({
     return users.filter((user) => user.clerkId !== identity.subject);
   },
 });
+
+
+export const updatePresence = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return;
+
+    // Find the currently logged-in user in our database
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (user) {
+      // Update their lastSeen timestamp to right now
+      await ctx.db.patch(user._id, { lastSeen: Date.now() });
+    }
+  },
+});
