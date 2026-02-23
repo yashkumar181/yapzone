@@ -27,7 +27,8 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   const typingIndicators = useQuery(api.typing.getActive, { conversationId });
   const startTyping = useMutation(api.typing.start);
   const stopTyping = useMutation(api.typing.stop);
-  
+  const markAsRead = useMutation(api.conversations.markAsRead);
+
   const [newMessage, setNewMessage] = useState("");
   const lastTypingTimeRef = useRef<number>(0);
 
@@ -37,6 +38,14 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, typingIndicators]);
+
+  // NEW: Mark chat as read whenever new messages arrive while it's open
+useEffect(() => {
+  if (messages) {
+    markAsRead({ conversationId }).catch(() => {});
+  }
+}, [messages, conversationId, markAsRead]);
+
 
   // FIX 1: Explicitly stop typing when backing out of the chat
   useEffect(() => {

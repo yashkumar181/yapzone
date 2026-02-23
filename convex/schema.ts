@@ -14,6 +14,8 @@ export default defineSchema({
   conversations: defineTable({
     participantOne: v.string(), // Clerk ID of user 1
     participantTwo: v.string(), // Clerk ID of user 2
+    participantOneLastRead: v.optional(v.number()), // NEW
+    participantTwoLastRead: v.optional(v.number()), // NEW
   })
     .index("by_participantOne", ["participantOne"])
     .index("by_participantTwo", ["participantTwo"]),

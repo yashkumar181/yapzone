@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-// EXISTING: Creates or fetches a chat when you click a user
+// Create or Fetch a Chat
 export const getOrCreate = mutation({
   args: { otherUserId: v.string() },
   handler: async (ctx, args) => {
@@ -27,14 +27,17 @@ export const getOrCreate = mutation({
 
     if (conv2) return conv2._id;
 
+    // Initialize with current time so you don't have "unread" messages from before you existed
     return await ctx.db.insert("conversations", {
       participantOne: myId,
       participantTwo: otherId,
+      participantOneLastRead: Date.now(),
+      participantTwoLastRead: Date.now(),
     });
   },
 });
 
-// NEW: Fetches all active conversations with user details and the latest message
+// List Conversations with Unread Counts
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -43,13 +46,11 @@ export const list = query({
 
     const myId = identity.subject;
 
-    // 1. Get all conversations where I am participantOne
     const conv1 = await ctx.db
       .query("conversations")
       .withIndex("by_participantOne", (q) => q.eq("participantOne", myId))
       .collect();
 
-    // 2. Get all conversations where I am participantTwo
     const conv2 = await ctx.db
       .query("conversations")
       .withIndex("by_participantTwo", (q) => q.eq("participantTwo", myId))
@@ -57,39 +58,75 @@ export const list = query({
 
     const allConversations = [...conv1, ...conv2];
 
-    // 3. For every conversation, fetch the other user's profile AND the last message
     const enrichedConversations = await Promise.all(
       allConversations.map(async (conv) => {
-        // Figure out who the *other* person is
         const otherUserId = conv.participantOne === myId ? conv.participantTwo : conv.participantOne;
+        
+        // Determine my last read time
+        const myLastRead = conv.participantOne === myId 
+          ? conv.participantOneLastRead || 0 
+          : conv.participantTwoLastRead || 0;
 
-        // Grab their profile from the users table
         const otherUser = await ctx.db
           .query("users")
           .withIndex("by_clerkId", (q) => q.eq("clerkId", otherUserId))
           .first();
 
-        // Grab the absolute newest message in this conversation
         const lastMessage = await ctx.db
           .query("messages")
           .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
-          .order("desc") // Sorts newest to oldest
-          .first(); // Grabs just the top one
+          .order("desc")
+          .first();
+
+        // Calculate unread count: Messages in this chat, created AFTER myLastRead, sent by NOT me
+        // Calculate unread count: Messages in this chat, created AFTER myLastRead, sent by NOT me
+        const unreadMessages = await ctx.db
+          .query("messages")
+          .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
+          // FIXED: We must use q.and() instead of standard &&
+          .filter((q) => 
+            q.and(
+              q.gt(q.field("_creationTime"), myLastRead),
+              q.neq(q.field("senderId"), myId)
+            )
+          )
+          .collect();
 
         return {
           _id: conv._id,
           otherUser,
           lastMessage,
+          unreadCount: unreadMessages.length, // Include the count!
           _creationTime: conv._creationTime,
         };
       })
     );
 
-    // 4. Sort the sidebar so the chat with the most recent message is at the top
     return enrichedConversations.sort((a, b) => {
       const aTime = a.lastMessage?._creationTime || a._creationTime;
       const bTime = b.lastMessage?._creationTime || b._creationTime;
       return bTime - aTime;
     });
+  },
+});
+
+// NEW: Mark a conversation as read
+export const markAsRead = mutation({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv) throw new Error("Conversation not found");
+
+    const myId = identity.subject;
+
+    // Update ONLY my field
+    if (conv.participantOne === myId) {
+      await ctx.db.patch(args.conversationId, { participantOneLastRead: Date.now() });
+    } else if (conv.participantTwo === myId) {
+      await ctx.db.patch(args.conversationId, { participantTwoLastRead: Date.now() });
+    }
   },
 });
