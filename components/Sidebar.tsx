@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-import { Search, Loader2, SearchX } from "lucide-react";
+import { Search, Loader2, SearchX, MessageSquare } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserButton } from "@clerk/nextjs";
+import { formatMessageTime } from "@/lib/utils";
 
 interface SidebarProps {
   onSelectChat: (conversationId: Id<"conversations">, otherUserName: string) => void;
@@ -17,6 +18,7 @@ interface SidebarProps {
 
 export function Sidebar({ onSelectChat }: SidebarProps) {
   const users = useQuery(api.users.getUsers);
+  const conversations = useQuery(api.conversations.list);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -31,6 +33,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     try {
       const conversationId = await getOrCreateConversation({ otherUserId });
       onSelectChat(conversationId, otherUserName);
+      setSearchQuery(""); // Clear search to show the conversation list
     } catch (error) {
       console.error("Failed to create chat:", error);
     } finally {
@@ -39,7 +42,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   };
 
   return (
-    // UPDATED: Changed w-80 h-screen to w-full h-full
     <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col">
       <div className="p-4 border-b flex flex-col gap-4">
         <div className="flex items-center justify-between">
@@ -59,44 +61,109 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {users === undefined ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 p-2">
-                <Skeleton className="h-10 w-10 rounded-full" />
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
+          {/* LOGIC: If searching, show User List. If not searching, show Conversation List */}
+          {searchQuery ? (
+            // --- SEARCH RESULTS (USERS) ---
+            filteredUsers === undefined ? (
+              // Loading State for Search
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-2">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                  </div>
                 </div>
+              ))
+            ) : filteredUsers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3">
+                <div className="bg-zinc-200/50 dark:bg-zinc-800/50 p-3 rounded-full">
+                  <SearchX className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground">No users found</p>
               </div>
-            ))
-          ) : filteredUsers?.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3">
-              <div className="bg-zinc-200/50 dark:bg-zinc-800/50 p-3 rounded-full">
-                <SearchX className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm font-medium text-muted-foreground">No users found</p>
-            </div>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-muted-foreground px-2 py-2">Found Users</p>
+                {filteredUsers.map((user) => (
+                  <button
+                    key={user._id}
+                    disabled={isCreating === user.clerkId}
+                    className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-left disabled:opacity-50"
+                    onClick={() => handleStartChat(user.clerkId, user.name || "Unknown User")}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={user.imageUrl} />
+                        <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium text-sm truncate">
+                        {user.name}
+                      </span>
+                    </div>
+                    {isCreating === user.clerkId && (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </button>
+                ))}
+              </>
+            )
           ) : (
-            filteredUsers?.map((user) => (
-              <button
-                key={user._id}
-                disabled={isCreating === user.clerkId}
-                className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-left disabled:opacity-50"
-                onClick={() => handleStartChat(user.clerkId, user.name || "Unknown User")}
-              >
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarImage src={user.imageUrl} />
-                    <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <span className="font-medium text-sm truncate">
-                    {user.name}
-                  </span>
+            // --- ACTIVE CONVERSATIONS (DEFAULT VIEW) ---
+            conversations === undefined ? (
+              // Loading State for Conversations
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-2">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
                 </div>
-                {isCreating === user.clerkId && (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-              </button>
-            ))
+              ))
+            ) : conversations.length === 0 ? (
+               <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3 opacity-70">
+                <MessageSquare className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  No chats yet. <br/> Search above to start one!
+                </p>
+              </div>
+            ) : (
+              conversations.map((conv) => (
+                <button
+                  key={conv._id}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-left group"
+                  onClick={() => onSelectChat(conv._id, conv.otherUser?.name || "Unknown")}
+                >
+                  <Avatar>
+                    <AvatarImage src={conv.otherUser?.imageUrl} />
+                    <AvatarFallback>{conv.otherUser?.name?.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="font-medium text-sm truncate">
+                        {conv.otherUser?.name}
+                      </span>
+                      {conv.lastMessage && (
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                          {formatMessageTime(conv.lastMessage._creationTime)}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className="text-xs text-muted-foreground truncate group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors">
+                      {conv.lastMessage ? (
+                         // If message is ours, prefix with "You:"
+                         (conv.lastMessage.senderId !== conv.otherUser?.clerkId ? "You: " : "") + 
+                         conv.lastMessage.content
+                      ) : (
+                        <span className="italic">Started a conversation</span>
+                      )}
+                    </p>
+                  </div>
+                </button>
+              ))
+            )
           )}
         </div>
       </ScrollArea>
