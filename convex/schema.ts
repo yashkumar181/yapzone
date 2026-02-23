@@ -26,6 +26,7 @@ export default defineSchema({
     senderId: v.string(), // Clerk ID of the sender
     content: v.string(),
     isDeleted: v.optional(v.boolean()), // NEW: Soft delete flag
+    deletedFor: v.optional(v.array(v.string())),
   }).index("by_conversationId", ["conversationId"]),
  
   // NEW: Track who is typing, where, and when it expires
