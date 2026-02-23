@@ -24,4 +24,12 @@ export default defineSchema({
     senderId: v.string(), // Clerk ID of the sender
     content: v.string(),
   }).index("by_conversationId", ["conversationId"]),
+ 
+  // NEW: Track who is typing, where, and when it expires
+  typingIndicators: defineTable({
+    conversationId: v.id("conversations"),
+    userId: v.string(),
+    expiresAt: v.number(),
+  }).index("by_conversationId", ["conversationId"]),
 });
+
