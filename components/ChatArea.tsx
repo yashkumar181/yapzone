@@ -5,10 +5,9 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatMessageTime } from "@/lib/utils";
 
 interface ChatAreaProps {
@@ -28,26 +27,69 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   const startTyping = useMutation(api.typing.start);
   const stopTyping = useMutation(api.typing.stop);
   const markAsRead = useMutation(api.conversations.markAsRead);
-
+  
   const [newMessage, setNewMessage] = useState("");
   const lastTypingTimeRef = useRef<number>(0);
+  const loadedChatRef = useRef<string | null>(null); // NEW: Track which chat is currently loaded
 
-  // Auto-scroll to bottom when new messages or typing indicators appear
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+  // Smart Scroll State
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const atBottom = scrollHeight - scrollTop <= clientHeight + 50; 
+    
+    setIsAtBottom(atBottom);
+    
+    if (atBottom) {
+      setShowScrollButton(false);
     }
-  }, [messages, typingIndicators]);
+  };
 
-  // NEW: Mark chat as read whenever new messages arrive while it's open
-useEffect(() => {
-  if (messages) {
-    markAsRead({ conversationId }).catch(() => {});
-  }
-}, [messages, conversationId, markAsRead]);
+  const scrollToBottom = () => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    setIsAtBottom(true);
+    setShowScrollButton(false);
+  };
 
+  // EFFECT 1: Handle MESSAGES (Auto-snap on load, Smooth-scroll on new message)
+  useEffect(() => {
+    if (messages) {
+      markAsRead({ conversationId }).catch(() => {});
 
-  // FIX 1: Explicitly stop typing when backing out of the chat
+      if (loadedChatRef.current !== conversationId) {
+        // First time loading this specific chat: INSTANT snap to bottom
+        scrollRef.current?.scrollIntoView({ behavior: "auto" });
+        loadedChatRef.current = conversationId;
+      } else if (isAtBottom) {
+        // Already in the chat, new message arrived: SMOOTH scroll gently
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+      } else {
+        // User scrolled up, show the button instead
+        if (messages.length > 0) setShowScrollButton(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, conversationId, markAsRead]); 
+  
+  // EFFECT 2: Handle TYPING INDICATORS (Only scrolls, NEVER shows button)
+  useEffect(() => {
+    if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
+      scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typingIndicators]); 
+
+  // Force scroll on initial load
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+       scrollRef.current?.scrollIntoView({ behavior: "auto" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]); 
+
+  // Cleanup typing when unmounting
   useEffect(() => {
     return () => {
       stopTyping({ conversationId }).catch(() => {});
@@ -58,7 +100,6 @@ useEffect(() => {
     const value = e.target.value;
     setNewMessage(value);
 
-    // FIX 2: If the user deletes all their text, instantly clear the indicator
     if (value.trim() === "") {
       stopTyping({ conversationId });
       return;
@@ -77,21 +118,20 @@ useEffect(() => {
 
     const content = newMessage.trim();
     setNewMessage(""); 
-    
     stopTyping({ conversationId });
 
+    setIsAtBottom(true);
+    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+
     try {
-      await sendMessage({
-        conversationId,
-        content,
-      });
+      await sendMessage({ conversationId, content });
     } catch (error) {
       console.error("Failed to send message:", error);
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full relative">
       <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center gap-2 shadow-sm z-10">
         <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
           <ArrowLeft className="h-5 w-5" />
@@ -99,7 +139,10 @@ useEffect(() => {
         <h3 className="font-semibold text-lg">Chatting with {otherUserName}</h3>
       </div>
 
-      <ScrollArea className="flex-1 p-4 bg-zinc-50 dark:bg-zinc-900">
+      <div 
+        className="flex-1 overflow-y-auto p-4 bg-zinc-50 dark:bg-zinc-900" 
+        onScroll={handleScroll}
+      >
         <div className="flex flex-col gap-4 pb-4">
           {messages === undefined ? (
             <p className="text-center text-sm text-muted-foreground mt-4">Loading messages...</p>
@@ -113,24 +156,12 @@ useEffect(() => {
           ) : (
             messages.map((msg) => {
               const isMe = msg.senderId === user?.id;
-              
               return (
-                <div
-                  key={msg._id}
-                  className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
-                >
-                  <div
-                    className={`max-w-[75%] px-4 py-2 rounded-2xl ${
-                      isMe
-                        ? "bg-black text-white dark:bg-white dark:text-black rounded-br-sm"
-                        : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-bl-sm"
-                    }`}
-                  >
+                <div key={msg._id} className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}>
+                  <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${isMe ? "bg-black text-white dark:bg-white dark:text-black rounded-br-sm" : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-bl-sm"}`}>
                     <p className="text-sm">{msg.content}</p>
                   </div>
-                  <span className="text-[10px] text-muted-foreground px-1">
-                    {formatMessageTime(msg._creationTime)}
-                  </span>
+                  <span className="text-[10px] text-muted-foreground px-1">{formatMessageTime(msg._creationTime)}</span>
                 </div>
               );
             })
@@ -143,15 +174,24 @@ useEffect(() => {
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
                </div>
-               <span className="text-xs text-muted-foreground animate-pulse">
-                 {otherUserName} is typing...
-               </span>
+               <span className="text-xs text-muted-foreground animate-pulse">{otherUserName} is typing...</span>
             </div>
           )}
           
           <div ref={scrollRef} />
         </div>
-      </ScrollArea>
+      </div>
+
+      {showScrollButton && (
+        <Button 
+          onClick={scrollToBottom}
+          className="absolute bottom-20 left-1/2 transform -translate-x-1/2 rounded-full shadow-lg z-20"
+          size="sm"
+        >
+          <ArrowDown className="h-4 w-4 mr-1" />
+          New messages
+        </Button>
+      )}
 
       <div className="p-4 border-t bg-white dark:bg-zinc-950">
         <form onSubmit={handleSend} className="flex gap-2">
