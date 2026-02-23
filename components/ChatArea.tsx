@@ -22,11 +22,12 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   const { user } = useUser();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadedChatRef = useRef<string | null>(null);
-  const prevMessageCountRef = useRef<number>(0); // NEW: Track the total number of messages
+  const prevMessageCountRef = useRef<number>(0);
+  
   const messages = useQuery(api.messages.list, { conversationId });
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
-  const toggleReaction = useMutation(api.messages.react); // NEW: Reaction mutation
+  const toggleReaction = useMutation(api.messages.react);
   
   const typingIndicators = useQuery(api.typing.getActive, { conversationId });
   const startTyping = useMutation(api.typing.start);
@@ -40,13 +41,21 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   const [showScrollButton, setShowScrollButton] = useState(false);
   
   const [messageToDelete, setMessageToDelete] = useState<Id<"messages"> | null>(null);
-  const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Id<"messages"> | null>(null); // NEW: Reaction picker state
+  const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Id<"messages"> | null>(null);
+
+  // NEW: Mobile Long Press State
+  const [mobileActiveMessage, setMobileActiveMessage] = useState<Id<"messages"> | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     const atBottom = scrollHeight - scrollTop <= clientHeight + 50; 
     setIsAtBottom(atBottom);
     if (atBottom) setShowScrollButton(false);
+
+    // NEW: Dismiss mobile menus if the user starts scrolling
+    if (mobileActiveMessage) setMobileActiveMessage(null);
+    if (selectedMessageForReaction) setSelectedMessageForReaction(null);
   };
 
   const scrollToBottom = () => {
@@ -59,16 +68,13 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
     if (messages) {
       markAsRead({ conversationId }).catch(() => {});
 
-      // NEW LOGIC: Only trigger scroll stuff if the array actually got longer!
       const isNewMessageAdded = messages.length > prevMessageCountRef.current;
       prevMessageCountRef.current = messages.length;
 
       if (loadedChatRef.current !== conversationId) {
-        // First load of this chat
         scrollRef.current?.scrollIntoView({ behavior: "auto" });
         loadedChatRef.current = conversationId;
       } else if (isNewMessageAdded) {
-        // An actual new message arrived!
         if (isAtBottom) {
           scrollRef.current?.scrollIntoView({ behavior: "smooth" });
         } else {
@@ -77,9 +83,8 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, conversationId, markAsRead]);
+  }, [messages, conversationId, markAsRead]); 
 
-  
   useEffect(() => {
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -135,13 +140,30 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
       console.error("Failed to delete:", error);
     } finally {
       setMessageToDelete(null); 
+      setMobileActiveMessage(null); // Clean up mobile state
+    }
+  };
+
+  // NEW: Touch Handlers for Long Press
+  const handleTouchStart = (msgId: Id<"messages">) => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    // Set a 400ms timer. If they hold for 400ms, reveal the buttons!
+    longPressTimerRef.current = setTimeout(() => {
+      setMobileActiveMessage(msgId);
+    }, 400); 
+  };
+
+  const handleTouchEndOrMove = () => {
+    // If they let go or start scrolling before 400ms, cancel the timer
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
   };
 
   return (
     <div className="flex-1 flex flex-col h-full relative">
       
-      {/* Delete Modal Overlay */}
       {messageToDelete && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -186,23 +208,27 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
             messages.map((msg) => {
               const isMe = msg.senderId === user?.id;
               
-              // Helper to group reactions by emoji
               const reactionCounts = (msg.reactions || []).reduce((acc, r) => {
                 acc[r.emoji] = (acc[r.emoji] || 0) + 1;
                 return acc;
               }, {} as Record<string, number>);
 
-              // Did *I* react with this specific emoji?
               const myReactions = new Set(
                 (msg.reactions || []).filter(r => r.userId === user?.id).map(r => r.emoji)
               );
 
               return (
-                <div key={msg._id} className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} mb-2`}>
+                <div 
+                  key={msg._id} 
+                  className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} mb-2`}
+                  // NEW: Attach Touch Events
+                  onTouchStart={() => handleTouchStart(msg._id)}
+                  onTouchEnd={handleTouchEndOrMove}
+                  onTouchMove={handleTouchEndOrMove}
+                >
                   
                   <div className={`flex items-center gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} relative`}>
                     
-                    {/* The Message Bubble */}
                     <div
                       className={`max-w-[75%] px-4 py-2 relative ${
                         msg.isDeleted
@@ -221,7 +247,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                         <p className="text-sm">{msg.content}</p>
                       )}
 
-                      {/* Reaction Counts Display (Floating below bubble) */}
                       {msg.reactions && msg.reactions.length > 0 && !msg.isDeleted && (
                         <div className={`absolute -bottom-4 ${isMe ? "right-0" : "left-0"} flex gap-1 z-10`}>
                           {Object.entries(reactionCounts).map(([emoji, count]) => (
@@ -242,11 +267,12 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                       )}
                     </div>
 
-                    {/* Action Buttons (Smile & Trash) */}
                     {!msg.isDeleted && (
-                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1">
+                      // UPDATED: Use mobileActiveMessage to show on mobile, and md:group-hover for desktop!
+                      <div className={`flex items-center gap-1 transition-opacity duration-200 ${
+                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 md:group-hover:opacity-100"
+                      }`}>
                         
-                        {/* Reaction Trigger */}
                         <div className="relative">
                           <button
                             onClick={() => setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id)}
@@ -255,7 +281,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                             <Smile className="h-4 w-4" />
                           </button>
 
-                          {/* The Emoji Picker Popup */}
                           {selectedMessageForReaction === msg._id && (
                             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200">
                               {EMOJIS.map((emoji) => (
@@ -264,6 +289,7 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                                   onClick={() => {
                                     toggleReaction({ messageId: msg._id, emoji });
                                     setSelectedMessageForReaction(null);
+                                    setMobileActiveMessage(null); // Clean up mobile state
                                   }}
                                   className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125"
                                 >
@@ -274,7 +300,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                           )}
                         </div>
 
-                        {/* Delete Trigger (Only for me) */}
                         {isMe && (
                           <button
                             onClick={() => setMessageToDelete(msg._id)}
@@ -288,7 +313,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                     )}
                   </div>
                   
-                  {/* Timestamp (pushed down slightly if there are reactions) */}
                   <span className={`text-[10px] text-muted-foreground px-1 ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
                     {formatMessageTime(msg._creationTime)}
                   </span>
