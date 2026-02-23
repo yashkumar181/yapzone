@@ -7,6 +7,7 @@ import { Id } from "../convex/_generated/dataModel";
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatArea } from "@/components/ChatArea";
+import { MessageSquare } from "lucide-react";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
@@ -31,19 +32,21 @@ export default function Home() {
     setActiveChatName(otherUserName);
   };
 
-  // Prevent flicker while Clerk loads auth state
   if (!isLoaded) return null;
 
   return (
     <main className="flex h-screen bg-white dark:bg-black overflow-hidden">
       <Sidebar onSelectChat={handleSelectChat} />
 
-      {/* The Chat Area */}
       <div className="flex-1 flex flex-col bg-zinc-100 dark:bg-zinc-900">
         {!activeChatId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-muted-foreground font-medium bg-white dark:bg-zinc-950 px-6 py-3 rounded-full shadow-sm">
-              Select a conversation to start chatting
+          <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-900/50">
+            <div className="bg-white dark:bg-zinc-950 h-24 w-24 rounded-full flex items-center justify-center shadow-sm mb-6 border">
+              <MessageSquare className="h-10 w-10 text-muted-foreground/50" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">Welcome to YapZone</h2>
+            <p className="text-muted-foreground max-w-sm text-center text-sm">
+              Select a conversation from the sidebar to start chatting, or search for someone new.
             </p>
           </div>
         ) : (

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, SearchX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -68,9 +68,12 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </div>
             ))
           ) : filteredUsers?.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground p-4">
-              No users found.
-            </p>
+            <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3">
+              <div className="bg-zinc-200/50 dark:bg-zinc-800/50 p-3 rounded-full">
+                <SearchX className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">No users found</p>
+            </div>
           ) : (
             filteredUsers?.map((user) => (
               <button

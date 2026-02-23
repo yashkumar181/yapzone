@@ -5,11 +5,11 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send } from "lucide-react";
+import { Send, MessageCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { formatMessageTime } from "@/lib/utils"; // NEW: Import our formatter
+import { formatMessageTime } from "@/lib/utils";
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
@@ -52,9 +52,12 @@ export function ChatArea({ conversationId, otherUserName }: ChatAreaProps) {
           {messages === undefined ? (
             <p className="text-center text-sm text-muted-foreground mt-4">Loading messages...</p>
           ) : messages.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground mt-10">
-              No messages yet. Say hi!
-            </p>
+             <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
+              <MessageCircle className="h-12 w-12 text-muted-foreground" />
+              <p className="text-sm font-medium text-muted-foreground">
+                No messages yet. Be the first to say hi!
+              </p>
+            </div>
           ) : (
             messages.map((msg) => {
               const isMe = msg.senderId === user?.id;
@@ -62,7 +65,6 @@ export function ChatArea({ conversationId, otherUserName }: ChatAreaProps) {
               return (
                 <div
                   key={msg._id}
-                  // NEW: Wrap both bubble and timestamp in a flex-col container
                   className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
                 >
                   <div
@@ -74,7 +76,6 @@ export function ChatArea({ conversationId, otherUserName }: ChatAreaProps) {
                   >
                     <p className="text-sm">{msg.content}</p>
                   </div>
-                  {/* NEW: Display the smart timestamp */}
                   <span className="text-[10px] text-muted-foreground px-1">
                     {formatMessageTime(msg._creationTime)}
                   </span>
