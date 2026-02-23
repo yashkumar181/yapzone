@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown , Trash2, Ban} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
@@ -27,7 +27,7 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   const startTyping = useMutation(api.typing.start);
   const stopTyping = useMutation(api.typing.stop);
   const markAsRead = useMutation(api.conversations.markAsRead);
-  
+  const deleteMessage = useMutation(api.messages.remove);
   const [newMessage, setNewMessage] = useState("");
   const lastTypingTimeRef = useRef<number>(0);
   const loadedChatRef = useRef<string | null>(null); // NEW: Track which chat is currently loaded
@@ -157,11 +157,46 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
             messages.map((msg) => {
               const isMe = msg.senderId === user?.id;
               return (
-                <div key={msg._id} className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}>
-                  <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${isMe ? "bg-black text-white dark:bg-white dark:text-black rounded-br-sm" : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-bl-sm"}`}>
-                    <p className="text-sm">{msg.content}</p>
+                <div key={msg._id} className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"}`}>
+                  
+                  {/* Message Container with Hover Actions */}
+                  <div className={`flex items-center gap-2 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    
+                    {/* The Message Bubble */}
+                    <div
+                      className={`max-w-[75%] px-4 py-2 ${
+                        msg.isDeleted
+                          ? "bg-transparent border border-zinc-200 dark:border-zinc-800 text-muted-foreground italic rounded-2xl"
+                          : isMe
+                          ? "bg-black text-white dark:bg-white dark:text-black rounded-2xl rounded-br-sm shadow-sm"
+                          : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
+                      }`}
+                    >
+                      {msg.isDeleted ? (
+                        <div className="flex items-center gap-2 text-xs opacity-70">
+                          <Ban className="h-3 w-3" />
+                          This message was deleted
+                        </div>
+                      ) : (
+                        <p className="text-sm">{msg.content}</p>
+                      )}
+                    </div>
+
+                    {/* Delete Action Button (Only show for MY messages that ARE NOT deleted) */}
+                    {isMe && !msg.isDeleted && (
+                      <button
+                        onClick={() => deleteMessage({ messageId: msg._id })}
+                        className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full shrink-0"
+                        title="Delete message"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground px-1">{formatMessageTime(msg._creationTime)}</span>
+
+                  <span className="text-[10px] text-muted-foreground px-1">
+                    {formatMessageTime(msg._creationTime)}
+                  </span>
                 </div>
               );
             })

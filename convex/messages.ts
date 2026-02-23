@@ -38,4 +38,30 @@ export const send = mutation({
       content: args.content,
     });
   },
+  
+});
+
+// Add to the bottom of convex/messages.ts
+
+export const remove = mutation({
+  args: { messageId: v.id("messages") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    // 1. Fetch the message
+    const msg = await ctx.db.get(args.messageId);
+    if (!msg) throw new Error("Message not found");
+
+    // 2. SECURITY CHECK: Ensure the person deleting it actually sent it
+    if (msg.senderId !== identity.subject) {
+      throw new Error("You can only delete your own messages");
+    }
+
+    // 3. Perform the Soft Delete
+    await ctx.db.patch(args.messageId, {
+      isDeleted: true,
+      content: "", // Optional: Clear the content from the DB for privacy
+    });
+  },
 });
