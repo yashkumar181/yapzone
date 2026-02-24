@@ -68,7 +68,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
 
-  // NEW: Reply System State & Swipe Physics!
+  // Reply System State & Swipe Physics!
   const [replyingTo, setReplyingTo] = useState<{ id: Id<"messages">; content: string; senderName: string } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<{ [key: string]: number }>({});
   const swipeStartRef = useRef<{ id: string; x: number } | null>(null);
@@ -170,7 +170,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
 
     try {
-      // UPDATED: Now sends the reply ID to the backend!
       await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
       setReplyingTo(null); // Clear the reply preview UI
     } catch (error) {
@@ -203,7 +202,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     }
   };
   
-  // NEW: Integrated Swipe Physics & Long Press!
+  // Integrated Swipe Physics & Long Press!
   const handleTouchStart = (e: React.TouchEvent, msgId: Id<"messages">) => {
     // 1. Setup Long Press for Mobile Menu
     if (mobileActiveMessage !== msgId) {
@@ -448,117 +447,125 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
       {/* Group Info Drawer */}
       {showGroupInfo && isGroup && groupDetails && (
-        <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+        <>
+          {/* NEW: Click-outside invisible overlay. Also adds a sleek dimming effect to the chat! */}
+          <div 
+            className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all" 
+            onClick={() => setShowGroupInfo(false)} 
+          />
           
-          <div className="p-4 border-b flex items-center gap-3 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
-            <Button variant="ghost" size="icon" onClick={() => setShowGroupInfo(false)} className="-ml-2 shrink-0">
-              <X className="h-5 w-5" />
-            </Button>
-            <h2 className="font-bold text-lg truncate">Group Info</h2>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            <div className="text-center space-y-2">
-              <div className="bg-zinc-100 dark:bg-zinc-900 h-20 w-20 rounded-full mx-auto flex items-center justify-center border shadow-sm mb-3">
-                <Users className="h-10 w-10 text-muted-foreground" />
-              </div>
-              
-              {isEditingName ? (
-                <div className="flex items-center gap-2 justify-center max-w-[200px] mx-auto animate-in fade-in">
-                  <Input 
-                    value={editNameValue} 
-                    onChange={(e) => setEditNameValue(e.target.value)}
-                    className="h-8 text-center bg-white dark:bg-zinc-950"
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleRenameGroup()}
-                  />
-                  <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 shrink-0" onClick={handleRenameGroup}>
-                    <Check className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center gap-2 group/title">
-                  <h3 className="font-bold text-xl truncate">{groupDetails.groupName}</h3>
-                  {isAdmin && (
-                    <button 
-                      onClick={() => { setEditNameValue(groupDetails.groupName || ""); setIsEditingName(true); }} 
-                      className="text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-opacity"
-                      title="Rename group"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              )}
-              
-              <p className="text-sm text-muted-foreground">{groupDetails.groupMembers?.length} Members</p>
+          <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+            
+            <div className="p-4 border-b flex items-center gap-3 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
+              <Button variant="ghost" size="icon" onClick={() => setShowGroupInfo(false)} className="-ml-2 shrink-0">
+                <X className="h-5 w-5" />
+              </Button>
+              <h2 className="font-bold text-lg truncate">Group Info</h2>
             </div>
 
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
-              <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
-                {groupDetails.groupMembers?.map((memberId) => {
-                  const isMe = user?.id === memberId;
-                  const isThisUserAdmin = groupDetails.groupAdmin === memberId;
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="bg-zinc-100 dark:bg-zinc-900 h-20 w-20 rounded-full mx-auto flex items-center justify-center border shadow-sm mb-3">
+                  <Users className="h-10 w-10 text-muted-foreground" />
+                </div>
+                
+                {isEditingName ? (
+                  <div className="flex items-center gap-2 justify-center max-w-[200px] mx-auto animate-in fade-in">
+                    <Input 
+                      value={editNameValue} 
+                      onChange={(e) => setEditNameValue(e.target.value)}
+                      className="h-8 text-center bg-white dark:bg-zinc-950"
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleRenameGroup()}
+                    />
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 shrink-0" onClick={handleRenameGroup}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 group/title">
+                    <h3 className="font-bold text-xl truncate">{groupDetails.groupName}</h3>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => { setEditNameValue(groupDetails.groupName || ""); setIsEditingName(true); }} 
+                        className="text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-opacity"
+                        title="Rename group"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                <p className="text-sm text-muted-foreground">{groupDetails.groupMembers?.length} Members</p>
+              </div>
 
-                  const memberUser = isMe && user ? {
-                    clerkId: user.id,
-                    name: user.fullName || user.firstName || "You",
-                    imageUrl: user.imageUrl
-                  } : users?.find(u => u.clerkId === memberId);
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
+                <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
+                  {groupDetails.groupMembers?.map((memberId) => {
+                    const isMe = user?.id === memberId;
+                    const isThisUserAdmin = groupDetails.groupAdmin === memberId;
 
-                  if (!memberUser) return null;
+                    const memberUser = isMe && user ? {
+                      clerkId: user.id,
+                      name: user.fullName || user.firstName || "You",
+                      imageUrl: user.imageUrl
+                    } : users?.find(u => u.clerkId === memberId);
 
-                  return (
-                    <div 
-                      key={memberId} 
-                      className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
-                      onClick={() => {
-                        if (!isMe) {
-                          setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
-                        }
-                      }}
-                    >
-                      <Avatar className="h-10 w-10 border border-black/5 dark:border-white/10 shadow-sm">
-                        <AvatarImage src={memberUser.imageUrl} />
-                        <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate flex items-center gap-2">
-                          {memberUser.name} 
-                          {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
-                        </p>
-                      </div>
-                      
-                      {isThisUserAdmin && (
-                        <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
-                          <Crown className="h-3 w-3" /> Admin
+                    if (!memberUser) return null;
+
+                    return (
+                      <div 
+                        key={memberId} 
+                        className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
+                        onClick={() => {
+                          if (!isMe) {
+                            setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
+                          }
+                        }}
+                      >
+                        <Avatar className="h-10 w-10 border border-black/5 dark:border-white/10 shadow-sm">
+                          <AvatarImage src={memberUser.imageUrl} />
+                          <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate flex items-center gap-2">
+                            {memberUser.name} 
+                            {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
+                          </p>
                         </div>
-                      )}
+                        
+                        {isThisUserAdmin && (
+                          <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
+                            <Crown className="h-3 w-3" /> Admin
+                          </div>
+                        )}
 
-                      {isAdmin && !isMe && (
-                        <button 
-                          onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
-                          className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
-                          title={`Kick ${memberUser.name}`}
-                        >
-                          <UserMinus className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                        {isAdmin && !isMe && (
+                          <button 
+                            onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
+                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
+                            title={`Kick ${memberUser.name}`}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-             <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
-               <LogOut className="h-4 w-4 mr-2" />
-               Leave Group
-             </Button>
+            <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
+               <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
+                 <LogOut className="h-4 w-4 mr-2" />
+                 Leave Group
+               </Button>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Main Chat Feed */}
@@ -601,7 +608,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 (msg.reactions || []).filter(r => r.userId === user?.id).map(r => r.emoji)
               );
 
-              // NEW: Get the replied message data to show the Quoted Bubble!
+              // Get the replied message data to show the Quoted Bubble!
               const repliedMessage = msg.replyTo ? messages.find(m => m._id === msg.replyTo) : null;
               const repliedSenderName = repliedMessage 
                 ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName)) 
@@ -617,7 +624,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
                   onTouchMove={(e) => handleTouchMove(e, msg._id)}
                   style={{
-                    // NEW: The actual swipe physics movement!
+                    // The actual swipe physics movement!
                     transform: `translateX(${swipeOffset[msg._id] || 0}px)`,
                     transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
@@ -655,11 +662,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
                       }`}
                     >
-                      {/* NEW: Quoted Message Bubble Render */}
+                      {/* Quoted Message Bubble Render */}
                       {repliedMessage && !msg.isDeleted && (
                         <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
                              onClick={() => {
-                               // Optional bonus: smooth scroll up to the original message if clicked!
                                const el = document.getElementById(`msg-${repliedMessage._id}`);
                                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                              }}
@@ -675,7 +681,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           This message was deleted
                         </div>
                       ) : (
-                        // We add the id here so clicking a quote can scroll to it
                         <div id={`msg-${msg._id}`}>
                           {renderMessageContent(msg.content)}
                         </div>
@@ -706,7 +711,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
                     {!msg.isDeleted && (
                       <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${
-                        // FIXED: Removed md: so it always shows on hover!
                         mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       }`}>
                         
@@ -744,7 +748,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           )}
                         </div>
 
-                        {/* FIXED: Removed hidden md:block so you can always click reply on desktop! */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -848,7 +851,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           </div>
         )}
 
-        {/* NEW: Replying To Preview UI */}
+        {/* Replying To Preview UI */}
         {replyingTo && (
           <div className="mx-4 mt-3 mb-1 p-3 bg-zinc-100 dark:bg-zinc-900/80 border-l-4 border-blue-500 rounded-xl flex justify-between items-center animate-in slide-in-from-bottom-2 duration-200">
             <div className="flex flex-col min-w-0 pr-4">
