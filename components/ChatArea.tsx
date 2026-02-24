@@ -12,7 +12,6 @@ import { formatMessageTime } from "@/lib/utils";
 import { toast } from "sonner"; 
 import { Skeleton } from "@/components/ui/skeleton"; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
@@ -54,7 +53,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [mobileActiveMessage, setMobileActiveMessage] = useState<Id<"messages"> | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Group Features & Mutations
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
   const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
@@ -62,20 +60,18 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const kickMemberMutation = useMutation(api.conversations.kickMember);
   const updateGroupDetailsMutation = useMutation(api.conversations.updateGroupDetails);
   const addMembersMutation = useMutation(api.conversations.addMembers);
-  const renameGroupMutation = useMutation(api.conversations.renameGroup);
-  
+  const renameGroupMutation = useMutation(api.conversations.renameGroup); 
+
   const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null);
   const [memberToKick, setMemberToKick] = useState<{id: string, name: string} | null>(null);
   const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
   const isAdmin = groupDetails?.groupAdmin === user?.id; 
 
-  // Edit Details State
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
   const [editDescValue, setEditDescValue] = useState("");
   const [editImgValue, setEditImgValue] = useState("");
 
-  // Add Member State
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [addMemberQuery, setAddMemberQuery] = useState("");
 
@@ -104,9 +100,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   useEffect(() => {
     if (messages) {
-      // FIX #1: ALWAYS sync read receipts to fix the unread badge bug!
       markAsRead({ conversationId }).catch(() => {});
-
       const isNewMessageAdded = messages.length > prevMessageCountRef.current;
       prevMessageCountRef.current = messages.length;
 
@@ -121,7 +115,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         }
       }
     }
-  }, [messages, conversationId, markAsRead]); // Removed isGroup from dependencies
+  }, [messages, conversationId, markAsRead]);
 
   useEffect(() => {
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
@@ -293,8 +287,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     );
   };
 
-  // FIX #4: Unified Save function for Name, Description, and Image
-  // FIX #4: Unified Save function for Name, Description, and Image
   const handleSaveGroupDetails = async () => {
     if (!editNameValue.trim()) return setIsEditingGroup(false);
     try {
@@ -303,9 +295,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         description: editDescValue.trim() || undefined,
         imageUrl: editImgValue.trim() || undefined,
       });
-      // Rename separately since it's a required field in a different mutation
       if (editNameValue.trim() !== groupDetails?.groupName) {
-         // FIXED: Use the mutation hook instead of the raw API reference
          await renameGroupMutation({ conversationId, newName: editNameValue });
       }
       setIsEditingGroup(false);
@@ -313,6 +303,45 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     } catch (error) {
       toast.error("Failed to update group");
     }
+  };
+
+  // NEW: The Local File Upload logic
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_SIZE = 256; 
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Convert to highly-compressed jpeg to save safely in Convex string field
+        const base64String = canvas.toDataURL("image/jpeg", 0.8);
+        setEditImgValue(base64String);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleKickMemberClick = (e: React.MouseEvent, memberId: string, memberName: string) => {
@@ -332,7 +361,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     }
   };
 
-  // NEW: Add Member Logic
   const handleAddNewMember = async (userIdToAdd: string) => {
     try {
       await addMembersMutation({ conversationId, newMemberIds: [userIdToAdd] });
@@ -344,7 +372,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     }
   };
 
-  // FIX #2: Extract actual names for the typing indicator
   const activeTypingUsers = typingIndicators?.filter(t => t.userId !== user?.id) || [];
   const typingNames = activeTypingUsers.map(t => {
     const u = users?.find(u => u.clerkId === t.userId);
@@ -483,7 +510,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
               
-              {/* NEW: View to Add Members */}
               {isAddingMember ? (
                 <div className="space-y-4 animate-in fade-in">
                   <Input 
@@ -512,54 +538,65 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 <>
                   <div className="text-center space-y-3">
                     
-                    {/* Dynamic Avatar display */}
-                    {groupDetails.groupImageUrl ? (
-                      <img src={groupDetails.groupImageUrl} alt="Group Avatar" className="h-24 w-24 rounded-2xl mx-auto object-cover border shadow-sm" />
-                    ) : (
-                      <div className="bg-zinc-100 dark:bg-zinc-900 h-24 w-24 rounded-2xl mx-auto flex items-center justify-center border shadow-sm">
-                        <Users className="h-10 w-10 text-muted-foreground" />
-                      </div>
-                    )}
+                    {/* The Custom Upload Avatar and Pencil Edit Button! */}
+                    <div className="relative inline-block mx-auto">
+                      {groupDetails.groupImageUrl ? (
+                        <img src={groupDetails.groupImageUrl} alt="Group Avatar" className="h-24 w-24 rounded-2xl object-cover border shadow-sm" />
+                      ) : (
+                        <div className="bg-zinc-100 dark:bg-zinc-900 h-24 w-24 rounded-2xl flex items-center justify-center border shadow-sm">
+                          <Users className="h-10 w-10 text-muted-foreground" />
+                        </div>
+                      )}
+                      
+                      {/* THIS is the new pencil button: Always visible, stuck to bottom right */}
+                      {isAdmin && !isEditingGroup && (
+                        <button 
+                          onClick={() => { 
+                            setEditNameValue(groupDetails.groupName || ""); 
+                            setEditDescValue(groupDetails.groupDescription || "");
+                            setEditImgValue(groupDetails.groupImageUrl || "");
+                            setIsEditingGroup(true); 
+                          }} 
+                          className="absolute -bottom-2 -right-2 bg-zinc-900 text-white dark:bg-white dark:text-black p-2 rounded-full shadow-md hover:scale-110 transition-transform z-10"
+                          title="Edit Group Details"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                     
-                    {/* NEW: Expanded Edit Form for Admins */}
                     {isEditingGroup ? (
-                      <div className="flex flex-col gap-3 mx-auto animate-in fade-in p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800">
+                      <div className="flex flex-col gap-3 mx-auto animate-in fade-in p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 text-left mt-2">
                         <div>
-                          <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Group Name</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Group Name</label>
                           <Input value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" autoFocus/>
                         </div>
                         <div>
-                          <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Description</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Description</label>
                           <Input placeholder="What's this group about?" value={editDescValue} onChange={(e) => setEditDescValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1"/>
                         </div>
+                        
+                        {/* Native Input File Upload */}
                         <div>
-                          <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Image URL</label>
-                          <Input placeholder="Paste an image link..." value={editImgValue} onChange={(e) => setEditImgValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1 text-xs"/>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Update Image</label>
+                          <Input 
+                            type="file" 
+                            accept="image/*"
+                            onChange={handleImageUpload} 
+                            className="h-8 bg-white dark:bg-zinc-950 mt-1 text-xs cursor-pointer file:mr-2 file:py-0 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-900 hover:file:bg-zinc-200"
+                          />
                         </div>
+
                         <div className="flex gap-2 mt-2">
                           <Button size="sm" variant="ghost" className="flex-1" onClick={() => setIsEditingGroup(false)}>Cancel</Button>
                           <Button size="sm" className="flex-1" onClick={handleSaveGroupDetails}>Save</Button>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center gap-1 group/title relative">
+                      <div className="flex flex-col items-center justify-center gap-1">
                         <h3 className="font-bold text-xl px-6">{groupDetails.groupName}</h3>
                         {groupDetails.groupDescription && (
                           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 px-4">{groupDetails.groupDescription}</p>
-                        )}
-                        {isAdmin && (
-                          <button 
-                            onClick={() => { 
-                              setEditNameValue(groupDetails.groupName || ""); 
-                              setEditDescValue(groupDetails.groupDescription || "");
-                              setEditImgValue(groupDetails.groupImageUrl || "");
-                              setIsEditingGroup(true); 
-                            }} 
-                            className="absolute top-0 right-0 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-all"
-                            title="Edit Group Details"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
                         )}
                         <p className="text-xs text-muted-foreground mt-2">{groupDetails.groupMembers?.length} Members</p>
                       </div>
@@ -620,7 +657,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       })}
                     </div>
                     
-                    {/* NEW: Add Member Button for Admin */}
                     {isAdmin && (
                       <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingMember(true)}>
                         <UserPlus className="h-4 w-4 mr-2" /> Add Members
@@ -853,7 +889,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
                </div>
-               {/* FIX #2: Dynamic typing names rendered here! */}
                <span className="text-xs text-muted-foreground animate-pulse">
                  {typingText}
                </span>
