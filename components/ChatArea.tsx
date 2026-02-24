@@ -9,6 +9,8 @@ import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile } from "l
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
+import { toast } from "sonner"; 
+import { Skeleton } from "@/components/ui/skeleton"; 
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
@@ -46,7 +48,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   const [mobileActiveMessage, setMobileActiveMessage] = useState<Id<"messages"> | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // NEW: Global Tap Handler to dismiss menus
   const handleGlobalTap = () => {
     if (mobileActiveMessage) setMobileActiveMessage(null);
     if (selectedMessageForReaction) setSelectedMessageForReaction(null);
@@ -58,7 +59,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
     setIsAtBottom(atBottom);
     if (atBottom) setShowScrollButton(false);
 
-    // Dismiss menus on scroll
     handleGlobalTap();
   };
 
@@ -118,9 +118,15 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
     }
   };
 
-  const handleSend = async (e: React.FormEvent) => {
+const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
+
+    // NEW: Explicitly check for internet connection before sending
+    if (!navigator.onLine) {
+      toast.error("You are offline. Please check your connection.");
+      return;
+    }
 
     const content = newMessage.trim();
     setNewMessage(""); 
@@ -133,6 +139,8 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
       await sendMessage({ conversationId, content });
     } catch (error) {
       console.error("Failed to send message:", error);
+      toast.error("Failed to send message. Please try again.");
+      setNewMessage(content); 
     }
   };
 
@@ -140,16 +148,26 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
     if (!messageToDelete) return;
     try {
       await deleteMessage({ messageId: messageToDelete, type });
+      toast.success("Message deleted"); 
     } catch (error) {
       console.error("Failed to delete:", error);
+      toast.error("Could not delete message."); 
     } finally {
       setMessageToDelete(null); 
       setMobileActiveMessage(null); 
     }
   };
 
+  const handleToggleReaction = async (msgId: Id<"messages">, emoji: string) => {
+    try {
+      await toggleReaction({ messageId: msgId, emoji });
+    } catch (error) {
+      console.error("Failed to react:", error);
+      toast.error("Could not add reaction."); 
+    }
+  };
+  
   const handleTouchStart = (msgId: Id<"messages">) => {
-    // UPDATED: If touching a different message, clear the old menu instantly
     if (mobileActiveMessage !== msgId) {
       setMobileActiveMessage(null);
       setSelectedMessageForReaction(null);
@@ -169,13 +187,12 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
   };
 
   return (
-    // UPDATED: Added onClick here to capture taps on the background
     <div className="flex-1 flex flex-col h-full relative" onClick={handleGlobalTap}>
       
       {messageToDelete && (
         <div 
           className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={(e) => e.stopPropagation()} // Prevent modal taps from bubbling
+          onClick={(e) => e.stopPropagation()} 
         >
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
             <div>
@@ -207,7 +224,21 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
       <div className="flex-1 overflow-y-auto p-4 bg-zinc-50 dark:bg-zinc-900" onScroll={handleScroll}>
         <div className="flex flex-col gap-4 pb-4">
           {messages === undefined ? (
-            <p className="text-center text-sm text-muted-foreground mt-4">Loading messages...</p>
+            // UPDATED: Beautiful staggered skeleton layout for loading state
+            <div className="flex flex-col gap-4 w-full pt-4 animate-pulse px-2">
+              <div className="flex justify-start">
+                <Skeleton className="h-10 w-[60%] rounded-2xl rounded-bl-sm bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <div className="flex justify-end">
+                <Skeleton className="h-10 w-[40%] rounded-2xl rounded-br-sm bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <div className="flex justify-end">
+                <Skeleton className="h-16 w-[50%] rounded-2xl rounded-br-sm bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <div className="flex justify-start">
+                <Skeleton className="h-10 w-[45%] rounded-2xl rounded-bl-sm bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+            </div>
           ) : messages.length === 0 ? (
              <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
               <MessageCircle className="h-12 w-12 text-muted-foreground" />
@@ -262,10 +293,9 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                           {Object.entries(reactionCounts).map(([emoji, count]) => (
                             <button
                               key={emoji}
-                              // UPDATED: Prevent tap from dismissing menu
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleReaction({ messageId: msg._id, emoji });
+                                handleToggleReaction(msg._id, emoji);
                               }}
                               className={`text-[10px] px-1.5 py-0.5 rounded-full border shadow-sm transition-transform hover:scale-110 flex items-center gap-1 ${
                                 myReactions.has(emoji)
@@ -288,7 +318,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                         
                         <div className="relative">
                           <button
-                            // UPDATED: Prevent tap from dismissing menu
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id);
@@ -301,15 +330,14 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
                           {selectedMessageForReaction === msg._id && (
                             <div 
                               className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200"
-                              onClick={(e) => e.stopPropagation()} // UPDATED: Protect the palette container
+                              onClick={(e) => e.stopPropagation()} 
                             >
                               {EMOJIS.map((emoji) => (
                                 <button
                                   key={emoji}
-                                  // UPDATED: Prevent tap from bubbling, but manually clear state
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    toggleReaction({ messageId: msg._id, emoji });
+                                    handleToggleReaction(msg._id, emoji);
                                     setSelectedMessageForReaction(null);
                                     setMobileActiveMessage(null); 
                                   }}
@@ -324,7 +352,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
 
                         {isMe && (
                           <button
-                            // UPDATED: Prevent tap from dismissing menu
                             onClick={(e) => {
                               e.stopPropagation();
                               setMessageToDelete(msg._id);
@@ -364,7 +391,6 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
 
       {showScrollButton && (
         <Button 
-          // UPDATED: Prevent tap from dismissing menu
           onClick={(e) => {
             e.stopPropagation();
             scrollToBottom();

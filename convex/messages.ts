@@ -24,6 +24,7 @@ export const send = mutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
+    
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
