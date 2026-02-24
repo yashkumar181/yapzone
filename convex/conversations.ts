@@ -285,3 +285,54 @@ export const leaveGroup = mutation({
     await ctx.db.patch(args.conversationId, patchData);
   },
 });
+
+// NEW: Rename a group (Admin only)
+export const renameGroup = mutation({
+  args: { 
+    conversationId: v.id("conversations"),
+    newName: v.string()
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    const myId = identity.subject;
+
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv || !conv.isGroup) throw new Error("Not a group");
+    
+    // Security check: Only the admin can rename
+    if (conv.groupAdmin !== myId) throw new Error("Only the admin can rename this group");
+
+    await ctx.db.patch(args.conversationId, { groupName: args.newName.trim() });
+  },
+});
+
+// NEW: Kick a member from the group (Admin only)
+export const kickMember = mutation({
+  args: { 
+    conversationId: v.id("conversations"),
+    memberIdToKick: v.string()
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    const myId = identity.subject;
+
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv || !conv.isGroup) throw new Error("Not a group");
+    
+    // Security checks
+    if (conv.groupAdmin !== myId) throw new Error("Only the admin can kick members");
+    if (args.memberIdToKick === myId) throw new Error("You cannot kick yourself");
+
+    // Remove them from active members
+    const updatedMembers = (conv.groupMembers || []).filter((id) => id !== args.memberIdToKick);
+    // Add them to past members so they keep their read-only history
+    const updatedPastMembers = [...(conv.pastMembers || []), args.memberIdToKick];
+
+    await ctx.db.patch(args.conversationId, {
+      groupMembers: updatedMembers,
+      pastMembers: updatedPastMembers,
+    });
+  },
+});

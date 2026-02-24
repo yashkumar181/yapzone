@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, UserMinus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
@@ -18,7 +18,7 @@ interface ChatAreaProps {
   otherUserName: string;
   isGroup?: boolean; 
   onClose: () => void;
-  onSwitchChat?: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void; // NEW
+  onSwitchChat?: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void;
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
@@ -46,7 +46,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const [showLeaveModal, setShowLeaveModal] = useState(false); // NEW
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<Id<"messages"> | null>(null);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Id<"messages"> | null>(null);
 
@@ -57,9 +57,17 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
   const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
-  const getOrCreateConversation = useMutation(api.conversations.getOrCreate); // NEW
-  const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null); // NEW
+  const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
+  const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null);
+  const [memberToKick, setMemberToKick] = useState<{id: string, name: string} | null>(null);
   const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
+  const isAdmin = groupDetails?.groupAdmin === user?.id; 
+
+  // Admin Moderation Mutations & State
+  const renameGroupMutation = useMutation(api.conversations.renameGroup);
+  const kickMemberMutation = useMutation(api.conversations.kickMember);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
 
   const handleGlobalTap = () => {
     if (mobileActiveMessage) setMobileActiveMessage(null);
@@ -114,13 +122,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     };
   }, [conversationId, stopTyping]);
 
-const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewMessage(value);
 
     if (value.trim() === "") {
       stopTyping({ conversationId });
-      setMentionQuery(null); // Clear menu if empty
+      setMentionQuery(null);
       return;
     }
 
@@ -130,11 +138,10 @@ const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       lastTypingTimeRef.current = now;
     }
 
-    // NEW: @Mention Detection Logic
+    // @Mention Detection Logic
     if (isGroup && !isPastMember) {
       const cursorPosition = e.target.selectionStart || 0;
       const textBeforeCursor = value.slice(0, cursorPosition);
-      // Look for an "@" followed by letters/numbers right before the cursor
       const match = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/);
 
       if (match) {
@@ -212,18 +219,17 @@ const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
   };
 
-const confirmLeaveGroup = async (deleteHistory: boolean) => {
+  const confirmLeaveGroup = async (deleteHistory: boolean) => {
     try {
       await leaveGroupMutation({ conversationId, deleteHistory });
       toast.success(deleteHistory ? "Group deleted" : "Left the group");
       setShowLeaveModal(false);
-      onClose(); // Send them back to the welcome screen
+      onClose(); 
     } catch (error) {
       toast.error("Failed to process request");
     }
   };
 
-  // NEW: Transition to Private Chat
   const handleStartPrivateChat = async () => {
     if (!memberToChat || !onSwitchChat) return;
     try {
@@ -236,26 +242,26 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
       toast.error("Could not start chat");
     }
   };
-  // NEW: Insert the chosen member into the text box
+
   const handleMentionSelect = (name: string) => {
     if (mentionQuery === null) return;
-    const formattedName = name.replace(/\s+/g, ""); // Remove spaces for the tag (e.g., "Yash Kumar" -> "@YashKumar")
+    const formattedName = name.replace(/\s+/g, ""); 
     const lastAtIndex = newMessage.lastIndexOf("@" + mentionQuery);
     
     if (lastAtIndex !== -1) {
-      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + mentionQuery.length);
+      const newValue = 
+        newMessage.substring(0, lastAtIndex) + 
+        "@" + formattedName + " " + 
+        newMessage.substring(lastAtIndex + 1 + mentionQuery.length); 
+        
       setNewMessage(newValue);
     }
     setMentionQuery(null);
   };
 
-  // NEW: Render text with blue mention badges
   const renderMessageContent = (text: string) => {
     if (!isGroup) return <p className="text-sm">{text}</p>;
-    
-    // Split the message by words that start with @
     const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
-    
     return (
       <p className="text-sm">
         {parts.map((part, i) => {
@@ -266,6 +272,40 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
         })}
       </p>
     );
+  };
+
+  // Admin Rename Handler
+  const handleRenameGroup = async () => {
+    if (!editNameValue.trim() || editNameValue.trim() === groupDetails?.groupName) {
+      setIsEditingName(false);
+      return;
+    }
+    try {
+      await renameGroupMutation({ conversationId, newName: editNameValue });
+      setIsEditingName(false);
+      toast.success("Group renamed successfully");
+    } catch (error) {
+      toast.error("Failed to rename group");
+    }
+  };
+
+  // Opens the beautiful custom kick modal
+  const handleKickMemberClick = (e: React.MouseEvent, memberId: string, memberName: string) => {
+    e.stopPropagation(); 
+    setMemberToKick({ id: memberId, name: memberName });
+  };
+
+  // Actually executes the kick from the modal
+  const confirmKickMember = async () => {
+    if (!memberToKick) return;
+    try {
+      await kickMemberMutation({ conversationId, memberIdToKick: memberToKick.id });
+      toast.success(`${memberToKick.name} was removed from the group`);
+    } catch (error) {
+      toast.error("Failed to remove member");
+    } finally {
+      setMemberToKick(null); // Close the modal
+    }
   };
 
   return (
@@ -294,7 +334,7 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
         </div>
       )}
 
-      {/* NEW: Leave Group Options Modal */}
+      {/* Leave Group Options Modal */}
       {showLeaveModal && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -317,7 +357,27 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
         </div>
       )}
 
-      {/* NEW: Start Private Chat Modal */}
+      {/* NEW: Custom Kick Member Modal */}
+      {memberToKick && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div>
+              <h3 className="font-bold text-lg">Remove {memberToKick.name}?</h3>
+              <p className="text-sm text-muted-foreground mt-1">They will be removed from the group but can still view past messages.</p>
+            </div>
+            <div className="flex flex-col gap-2 mt-2">
+              <Button variant="destructive" onClick={confirmKickMember} className="w-full font-medium">
+                <UserMinus className="w-4 h-4 mr-2" /> Remove from Group
+              </Button>
+              <Button variant="ghost" onClick={() => setMemberToKick(null)} className="w-full font-medium">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start Private Chat Modal */}
       {memberToChat && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -346,7 +406,8 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
           className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
           onClick={() => isGroup && setShowGroupInfo(true)}
         >
-          <h3 className="font-semibold text-lg">{otherUserName}</h3>
+          {/* Dynamic header updates instantly when group is renamed */}
+          <h3 className="font-semibold text-lg">{isGroup ? groupDetails?.groupName || otherUserName : otherUserName}</h3>
           {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Tap here for group info</span>}
         </div>
       </div>
@@ -364,10 +425,39 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
             <div className="text-center space-y-2">
-              <div className="bg-zinc-100 dark:bg-zinc-900 h-20 w-20 rounded-full mx-auto flex items-center justify-center border shadow-sm">
+              <div className="bg-zinc-100 dark:bg-zinc-900 h-20 w-20 rounded-full mx-auto flex items-center justify-center border shadow-sm mb-3">
                 <Users className="h-10 w-10 text-muted-foreground" />
               </div>
-              <h3 className="font-bold text-xl">{groupDetails.groupName}</h3>
+              
+              {/* Admin Rename UI */}
+              {isEditingName ? (
+                <div className="flex items-center gap-2 justify-center max-w-[200px] mx-auto animate-in fade-in">
+                  <Input 
+                    value={editNameValue} 
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    className="h-8 text-center bg-white dark:bg-zinc-950"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleRenameGroup()}
+                  />
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 shrink-0" onClick={handleRenameGroup}>
+                    <Check className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 group/title">
+                  <h3 className="font-bold text-xl truncate">{groupDetails.groupName}</h3>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => { setEditNameValue(groupDetails.groupName || ""); setIsEditingName(true); }} 
+                      className="text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-opacity"
+                      title="Rename group"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+              
               <p className="text-sm text-muted-foreground">{groupDetails.groupMembers?.length} Members</p>
             </div>
 
@@ -376,9 +466,8 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
               <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
                 {groupDetails.groupMembers?.map((memberId) => {
                   const isMe = user?.id === memberId;
-                  const isAdmin = groupDetails.groupAdmin === memberId;
+                  const isThisUserAdmin = groupDetails.groupAdmin === memberId;
 
-                  // UPDATED: If the 'users' database query excludes you, we use your Clerk profile directly!
                   const memberUser = isMe && user ? {
                     clerkId: user.id,
                     name: user.fullName || user.firstName || "You",
@@ -390,8 +479,7 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
                   return (
                     <div 
                       key={memberId} 
-                      // NEW: Hover effects and click handler for starting private chats
-                      className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
+                      className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
                       onClick={() => {
                         if (!isMe) {
                           setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
@@ -405,15 +493,25 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate flex items-center gap-2">
                           {memberUser.name} 
-                          {/* NEW: (You) tag explicitly highlighted */}
                           {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
                         </p>
                       </div>
-                      {/* NEW: Prominent Admin Badge */}
-                      {isAdmin && (
+                      
+                      {isThisUserAdmin && (
                         <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
                           <Crown className="h-3 w-3" /> Admin
                         </div>
+                      )}
+
+                      {/* Admin Kick Button (Permanently visible on mobile, hover on desktop) */}
+                      {isAdmin && !isMe && (
+                        <button 
+                          onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
+                          className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
+                          title={`Kick ${memberUser.name}`}
+                        >
+                          <UserMinus className="h-4 w-4" />
+                        </button>
                       )}
                     </div>
                   );
@@ -546,7 +644,7 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
 
                     {!msg.isDeleted && (
                       <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${
-                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 md:group-hover:opacity-100"
+                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       }`}>
                         
                         <div className="relative">
@@ -641,7 +739,7 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
 
       <div className="p-4 border-t bg-white dark:bg-zinc-950 relative">
         
-        {/* NEW: Floating Mention Menu */}
+        {/* Floating Mention Menu */}
         {mentionQuery !== null && isGroup && (
           <div className="absolute bottom-full left-4 mb-2 w-64 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
             <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">
