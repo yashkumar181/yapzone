@@ -33,8 +33,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState<string | null>(null);
-  
-  // NEW: Chat Filter State (All | DMs | Groups)
   const [chatFilter, setChatFilter] = useState<"all" | "dms" | "groups">("all");
 
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -46,11 +44,10 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     user.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // NEW: Filter Logic for Conversations
   const filteredConversations = conversations?.filter(conv => {
     if (chatFilter === "dms") return !conv.isGroup;
     if (chatFilter === "groups") return conv.isGroup;
-    return true; // "all"
+    return true; 
   });
 
   const handleStartChat = async (otherUserId: string, otherUserName: string) => {
@@ -102,7 +99,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     );
   };
 
-  // NEW: Helper to get the real name of the sender for the preview
   const getSenderPrefix = (conv: any) => {
     if (!conv.lastMessage) return "";
     if (conv.lastMessage.senderId === user?.id) return "You: ";
@@ -116,7 +112,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   return (
     <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col relative">
       
-      {/* Premium Group Creation Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
           <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
@@ -135,7 +130,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               maxLength={25}
             />
             
-            {/* Horizontal scrolling chips for selected members */}
             {selectedMembers.length > 0 && (
               <ScrollArea className="w-full whitespace-nowrap pb-2">
                 <div className="flex gap-2">
@@ -197,7 +191,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* Upgraded Header & Search Bar */}
       <div className="pt-4 flex flex-col gap-4 border-b dark:border-white/[0.08]">
         <div className="flex items-center justify-between px-4">
           <h2 className="text-xl font-semibold tracking-tight">Chats</h2>
@@ -210,7 +203,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           </div>
         </div>
         
-        {/* Premium "Frosted" Search Input */}
         <div className="relative px-4">
           <Search className="absolute left-7 top-2.5 h-4 w-4 text-zinc-500 dark:text-zinc-400" />
           <Input
@@ -221,7 +213,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           />
         </div>
 
-        {/* NEW: Chat Filter Pills */}
         <div className="flex items-center gap-2 px-4 pb-3 mt-[-4px]">
           <button onClick={() => setChatFilter("all")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'all' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>All</button>
           <button onClick={() => setChatFilter("dms")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'dms' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>Direct</button>
@@ -267,7 +258,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </>
             )
           ) : (
-            // Render filteredConversations instead of conversations
             filteredConversations === undefined ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 mx-2 my-1">
@@ -292,9 +282,10 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                 >
                   
                   <div className="relative shrink-0 flex items-center">
-                    {/* NEW: Square Group Avatars */}
                     {conv.isGroup ? (
                        <Avatar className="h-10 w-10 rounded-xl border border-black/5 dark:border-white/10 shadow-sm transition-colors">
+                         {/* UPDATED: Displays the custom groupImageUrl! */}
+                         <AvatarImage src={conv.groupImageUrl} className="object-cover" />
                          <AvatarFallback className="rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/50 dark:to-blue-800/50 text-blue-700 dark:text-blue-300 font-bold">
                            {conv.groupName?.substring(0, 2).toUpperCase()}
                          </AvatarFallback>
@@ -331,7 +322,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                       </div>
                     </div>
                     
-                    {/* NEW: Real Sender Names in Group Preview */}
                     <p className={`text-xs truncate transition-colors ${conv.unreadCount > 0 ? "text-blue-500 dark:text-blue-400 font-medium" : "text-zinc-500 dark:text-zinc-500"}`}>
                       {conv.lastMessage ? (
                          <>

@@ -10,14 +10,15 @@ export default defineSchema({
     lastSeen: v.optional(v.number()),
   }).index("by_clerkId", ["clerkId"]),
 
-  // THE UPDATED CONVERSATIONS TABLE
   conversations: defineTable({
-    participantOne: v.optional(v.string()), // Must be optional
-    participantTwo: v.optional(v.string()), // Must be optional
+    participantOne: v.optional(v.string()), 
+    participantTwo: v.optional(v.string()), 
     participantOneLastRead: v.optional(v.number()),
     participantTwoLastRead: v.optional(v.number()),
     isGroup: v.optional(v.boolean()),
     groupName: v.optional(v.string()),
+    groupDescription: v.optional(v.string()), // NEW: Added Description
+    groupImageUrl: v.optional(v.string()),    // NEW: Added PFP URL
     groupMembers: v.optional(v.array(v.string())),
     groupAdmin: v.optional(v.string()),
     pastMembers: v.optional(v.array(v.string())), 

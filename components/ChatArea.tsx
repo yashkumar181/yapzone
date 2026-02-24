@@ -5,13 +5,14 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, UserMinus, Reply } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, UserMinus, Reply, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
 import { toast } from "sonner"; 
 import { Skeleton } from "@/components/ui/skeleton"; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
@@ -53,22 +54,31 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [mobileActiveMessage, setMobileActiveMessage] = useState<Id<"messages"> | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Group Features
+  // Group Features & Mutations
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
   const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
+  const kickMemberMutation = useMutation(api.conversations.kickMember);
+  const updateGroupDetailsMutation = useMutation(api.conversations.updateGroupDetails);
+  const addMembersMutation = useMutation(api.conversations.addMembers);
+  const renameGroupMutation = useMutation(api.conversations.renameGroup);
+  
   const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null);
   const [memberToKick, setMemberToKick] = useState<{id: string, name: string} | null>(null);
   const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
   const isAdmin = groupDetails?.groupAdmin === user?.id; 
 
-  const renameGroupMutation = useMutation(api.conversations.renameGroup);
-  const kickMemberMutation = useMutation(api.conversations.kickMember);
-  const [isEditingName, setIsEditingName] = useState(false);
+  // Edit Details State
+  const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+  const [editDescValue, setEditDescValue] = useState("");
+  const [editImgValue, setEditImgValue] = useState("");
 
-  // Reply System State & Swipe Physics!
+  // Add Member State
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [addMemberQuery, setAddMemberQuery] = useState("");
+
   const [replyingTo, setReplyingTo] = useState<{ id: Id<"messages">; content: string; senderName: string } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<{ [key: string]: number }>({});
   const swipeStartRef = useRef<{ id: string; x: number } | null>(null);
@@ -94,7 +104,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   useEffect(() => {
     if (messages) {
-      if (!isGroup) markAsRead({ conversationId }).catch(() => {});
+      // FIX #1: ALWAYS sync read receipts to fix the unread badge bug!
+      markAsRead({ conversationId }).catch(() => {});
 
       const isNewMessageAdded = messages.length > prevMessageCountRef.current;
       prevMessageCountRef.current = messages.length;
@@ -110,7 +121,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         }
       }
     }
-  }, [messages, conversationId, markAsRead, isGroup]); 
+  }, [messages, conversationId, markAsRead]); // Removed isGroup from dependencies
 
   useEffect(() => {
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
@@ -156,11 +167,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
-
-    if (!navigator.onLine) {
-      toast.error("You are offline. Please check your connection.");
-      return;
-    }
+    if (!navigator.onLine) return toast.error("You are offline.");
 
     const content = newMessage.trim();
     setNewMessage(""); 
@@ -171,10 +178,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
     try {
       await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
-      setReplyingTo(null); // Clear the reply preview UI
+      setReplyingTo(null); 
     } catch (error) {
-      console.error("Failed to send message:", error);
-      toast.error("Failed to send message. Please try again.");
+      toast.error("Failed to send message.");
       setNewMessage(content); 
     }
   };
@@ -185,7 +191,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       await deleteMessage({ messageId: messageToDelete, type });
       toast.success("Message deleted"); 
     } catch (error) {
-      console.error("Failed to delete:", error);
       toast.error("Could not delete message."); 
     } finally {
       setMessageToDelete(null); 
@@ -197,39 +202,27 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     try {
       await toggleReaction({ messageId: msgId, emoji });
     } catch (error) {
-      console.error("Failed to react:", error);
       toast.error("Could not add reaction."); 
     }
   };
   
-  // Integrated Swipe Physics & Long Press!
   const handleTouchStart = (e: React.TouchEvent, msgId: Id<"messages">) => {
-    // 1. Setup Long Press for Mobile Menu
     if (mobileActiveMessage !== msgId) {
       setMobileActiveMessage(null);
       setSelectedMessageForReaction(null);
     }
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => {
-      setMobileActiveMessage(msgId);
-    }, 400); 
-
-    // 2. Setup Swipe Physics Initial Coordinates
+    longPressTimerRef.current = setTimeout(() => setMobileActiveMessage(msgId), 400); 
     swipeStartRef.current = { id: msgId, x: e.touches[0].clientX };
   };
 
   const handleTouchMove = (e: React.TouchEvent, msgId: Id<"messages">) => {
-    // Cancel long press if they are scrolling or swiping
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-
-    // Handle Swipe Right to Reply
     if (!swipeStartRef.current || swipeStartRef.current.id !== msgId) return;
     const diff = e.touches[0].clientX - swipeStartRef.current.x;
-    
-    // Only allow swiping right, max resistance at 70px
     if (diff > 0 && diff < 70) {
       setSwipeOffset(prev => ({ ...prev, [msgId]: diff }));
     }
@@ -240,18 +233,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-
-    // If they swiped far enough, trigger the reply state!
     const diff = swipeOffset[msgId] || 0;
     if (diff > 45) {
       setReplyingTo({ id: msgId, content, senderName });
-      // Haptic feedback if supported on mobile
       if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50);
       }
     }
-
-    // Snap the message bubble back to 0 instantly
     setSwipeOffset(prev => ({ ...prev, [msgId]: 0 }));
     swipeStartRef.current = null;
   };
@@ -275,7 +263,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       setMemberToChat(null);
       onSwitchChat(newConvId, memberToChat.name, false);
     } catch (error) {
-      console.error(error);
       toast.error("Could not start chat");
     }
   };
@@ -284,13 +271,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (mentionQuery === null) return;
     const formattedName = name.replace(/\s+/g, ""); 
     const lastAtIndex = newMessage.lastIndexOf("@" + mentionQuery);
-    
     if (lastAtIndex !== -1) {
-      const newValue = 
-        newMessage.substring(0, lastAtIndex) + 
-        "@" + formattedName + " " + 
-        newMessage.substring(lastAtIndex + 1 + mentionQuery.length); 
-        
+      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + 1 + mentionQuery.length); 
       setNewMessage(newValue);
     }
     setMentionQuery(null);
@@ -311,17 +293,25 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     );
   };
 
-  const handleRenameGroup = async () => {
-    if (!editNameValue.trim() || editNameValue.trim() === groupDetails?.groupName) {
-      setIsEditingName(false);
-      return;
-    }
+  // FIX #4: Unified Save function for Name, Description, and Image
+  // FIX #4: Unified Save function for Name, Description, and Image
+  const handleSaveGroupDetails = async () => {
+    if (!editNameValue.trim()) return setIsEditingGroup(false);
     try {
-      await renameGroupMutation({ conversationId, newName: editNameValue });
-      setIsEditingName(false);
-      toast.success("Group renamed successfully");
+      await updateGroupDetailsMutation({
+        conversationId,
+        description: editDescValue.trim() || undefined,
+        imageUrl: editImgValue.trim() || undefined,
+      });
+      // Rename separately since it's a required field in a different mutation
+      if (editNameValue.trim() !== groupDetails?.groupName) {
+         // FIXED: Use the mutation hook instead of the raw API reference
+         await renameGroupMutation({ conversationId, newName: editNameValue });
+      }
+      setIsEditingGroup(false);
+      toast.success("Group details updated!");
     } catch (error) {
-      toast.error("Failed to rename group");
+      toast.error("Failed to update group");
     }
   };
 
@@ -334,13 +324,37 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (!memberToKick) return;
     try {
       await kickMemberMutation({ conversationId, memberIdToKick: memberToKick.id });
-      toast.success(`${memberToKick.name} was removed from the group`);
+      toast.success(`${memberToKick.name} was removed`);
     } catch (error) {
       toast.error("Failed to remove member");
     } finally {
       setMemberToKick(null); 
     }
   };
+
+  // NEW: Add Member Logic
+  const handleAddNewMember = async (userIdToAdd: string) => {
+    try {
+      await addMembersMutation({ conversationId, newMemberIds: [userIdToAdd] });
+      toast.success("Member added to group!");
+      setIsAddingMember(false);
+      setAddMemberQuery("");
+    } catch (error) {
+      toast.error("Failed to add member.");
+    }
+  };
+
+  // FIX #2: Extract actual names for the typing indicator
+  const activeTypingUsers = typingIndicators?.filter(t => t.userId !== user?.id) || [];
+  const typingNames = activeTypingUsers.map(t => {
+    const u = users?.find(u => u.clerkId === t.userId);
+    return u ? u.name?.split(' ')[0] : "Someone";
+  });
+  
+  let typingText = "";
+  if (typingNames.length === 1) typingText = `${typingNames[0]} is typing...`;
+  else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
+  else if (typingNames.length > 2) typingText = "Several people are typing...";
 
   return (
     <div className="flex-1 flex flex-col h-full relative" onClick={handleGlobalTap}>
@@ -440,7 +454,12 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
           onClick={() => isGroup && setShowGroupInfo(true)}
         >
-          <h3 className="font-semibold text-lg">{isGroup ? groupDetails?.groupName || otherUserName : otherUserName}</h3>
+          <div className="flex items-center gap-2">
+            {isGroup && groupDetails?.groupImageUrl && (
+               <img src={groupDetails.groupImageUrl} alt="Group" className="w-6 h-6 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" />
+            )}
+            <h3 className="font-semibold text-lg">{isGroup ? groupDetails?.groupName || otherUserName : otherUserName}</h3>
+          </div>
           {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Tap here for group info</span>}
         </div>
       </div>
@@ -448,10 +467,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       {/* Group Info Drawer */}
       {showGroupInfo && isGroup && groupDetails && (
         <>
-          {/* NEW: Click-outside invisible overlay. Also adds a sleek dimming effect to the chat! */}
           <div 
             className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all" 
-            onClick={() => setShowGroupInfo(false)} 
+            onClick={() => { setShowGroupInfo(false); setIsEditingGroup(false); setIsAddingMember(false); }} 
           />
           
           <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
@@ -460,102 +478,157 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               <Button variant="ghost" size="icon" onClick={() => setShowGroupInfo(false)} className="-ml-2 shrink-0">
                 <X className="h-5 w-5" />
               </Button>
-              <h2 className="font-bold text-lg truncate">Group Info</h2>
+              <h2 className="font-bold text-lg truncate">{isAddingMember ? "Add Members" : "Group Info"}</h2>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              <div className="text-center space-y-2">
-                <div className="bg-zinc-100 dark:bg-zinc-900 h-20 w-20 rounded-full mx-auto flex items-center justify-center border shadow-sm mb-3">
-                  <Users className="h-10 w-10 text-muted-foreground" />
-                </div>
-                
-                {isEditingName ? (
-                  <div className="flex items-center gap-2 justify-center max-w-[200px] mx-auto animate-in fade-in">
-                    <Input 
-                      value={editNameValue} 
-                      onChange={(e) => setEditNameValue(e.target.value)}
-                      className="h-8 text-center bg-white dark:bg-zinc-950"
-                      autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleRenameGroup()}
-                    />
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 shrink-0" onClick={handleRenameGroup}>
-                      <Check className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center gap-2 group/title">
-                    <h3 className="font-bold text-xl truncate">{groupDetails.groupName}</h3>
-                    {isAdmin && (
-                      <button 
-                        onClick={() => { setEditNameValue(groupDetails.groupName || ""); setIsEditingName(true); }} 
-                        className="text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-opacity"
-                        title="Rename group"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                )}
-                
-                <p className="text-sm text-muted-foreground">{groupDetails.groupMembers?.length} Members</p>
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
-                <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
-                  {groupDetails.groupMembers?.map((memberId) => {
-                    const isMe = user?.id === memberId;
-                    const isThisUserAdmin = groupDetails.groupAdmin === memberId;
-
-                    const memberUser = isMe && user ? {
-                      clerkId: user.id,
-                      name: user.fullName || user.firstName || "You",
-                      imageUrl: user.imageUrl
-                    } : users?.find(u => u.clerkId === memberId);
-
-                    if (!memberUser) return null;
-
-                    return (
-                      <div 
-                        key={memberId} 
-                        className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
-                        onClick={() => {
-                          if (!isMe) {
-                            setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
-                          }
-                        }}
-                      >
-                        <Avatar className="h-10 w-10 border border-black/5 dark:border-white/10 shadow-sm">
-                          <AvatarImage src={memberUser.imageUrl} />
-                          <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate flex items-center gap-2">
-                            {memberUser.name} 
-                            {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
-                          </p>
+              
+              {/* NEW: View to Add Members */}
+              {isAddingMember ? (
+                <div className="space-y-4 animate-in fade-in">
+                  <Input 
+                    placeholder="Search users to add..." 
+                    value={addMemberQuery}
+                    onChange={(e) => setAddMemberQuery(e.target.value)}
+                    className="bg-zinc-100 dark:bg-zinc-900"
+                  />
+                  <div className="space-y-2">
+                    {users?.filter(u => 
+                      !groupDetails.groupMembers?.includes(u.clerkId) && 
+                      u.name?.toLowerCase().includes(addMemberQuery.toLowerCase())
+                    ).map(u => (
+                      <div key={u._id} className="flex items-center justify-between p-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8"><AvatarImage src={u.imageUrl}/><AvatarFallback>{u.name?.charAt(0)}</AvatarFallback></Avatar>
+                          <span className="text-sm font-medium">{u.name}</span>
                         </div>
-                        
-                        {isThisUserAdmin && (
-                          <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
-                            <Crown className="h-3 w-3" /> Admin
-                          </div>
+                        <Button size="sm" onClick={() => handleAddNewMember(u.clerkId)}>Add</Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button variant="ghost" className="w-full mt-4" onClick={() => setIsAddingMember(false)}>Back to Group Info</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center space-y-3">
+                    
+                    {/* Dynamic Avatar display */}
+                    {groupDetails.groupImageUrl ? (
+                      <img src={groupDetails.groupImageUrl} alt="Group Avatar" className="h-24 w-24 rounded-2xl mx-auto object-cover border shadow-sm" />
+                    ) : (
+                      <div className="bg-zinc-100 dark:bg-zinc-900 h-24 w-24 rounded-2xl mx-auto flex items-center justify-center border shadow-sm">
+                        <Users className="h-10 w-10 text-muted-foreground" />
+                      </div>
+                    )}
+                    
+                    {/* NEW: Expanded Edit Form for Admins */}
+                    {isEditingGroup ? (
+                      <div className="flex flex-col gap-3 mx-auto animate-in fade-in p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800">
+                        <div>
+                          <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Group Name</label>
+                          <Input value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" autoFocus/>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Description</label>
+                          <Input placeholder="What's this group about?" value={editDescValue} onChange={(e) => setEditDescValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1"/>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Image URL</label>
+                          <Input placeholder="Paste an image link..." value={editImgValue} onChange={(e) => setEditImgValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1 text-xs"/>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <Button size="sm" variant="ghost" className="flex-1" onClick={() => setIsEditingGroup(false)}>Cancel</Button>
+                          <Button size="sm" className="flex-1" onClick={handleSaveGroupDetails}>Save</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-1 group/title relative">
+                        <h3 className="font-bold text-xl px-6">{groupDetails.groupName}</h3>
+                        {groupDetails.groupDescription && (
+                          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 px-4">{groupDetails.groupDescription}</p>
                         )}
-
-                        {isAdmin && !isMe && (
+                        {isAdmin && (
                           <button 
-                            onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
-                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
-                            title={`Kick ${memberUser.name}`}
+                            onClick={() => { 
+                              setEditNameValue(groupDetails.groupName || ""); 
+                              setEditDescValue(groupDetails.groupDescription || "");
+                              setEditImgValue(groupDetails.groupImageUrl || "");
+                              setIsEditingGroup(true); 
+                            }} 
+                            className="absolute top-0 right-0 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-all"
+                            title="Edit Group Details"
                           >
-                            <UserMinus className="h-4 w-4" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </button>
                         )}
+                        <p className="text-xs text-muted-foreground mt-2">{groupDetails.groupMembers?.length} Members</p>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
+                    <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
+                      {groupDetails.groupMembers?.map((memberId) => {
+                        const isMe = user?.id === memberId;
+                        const isThisUserAdmin = groupDetails.groupAdmin === memberId;
+
+                        const memberUser = isMe && user ? {
+                          clerkId: user.id,
+                          name: user.fullName || user.firstName || "You",
+                          imageUrl: user.imageUrl
+                        } : users?.find(u => u.clerkId === memberId);
+
+                        if (!memberUser) return null;
+
+                        return (
+                          <div 
+                            key={memberId} 
+                            className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
+                            onClick={() => {
+                              if (!isMe) setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
+                            }}
+                          >
+                            <Avatar className="h-10 w-10 border border-black/5 dark:border-white/10 shadow-sm">
+                              <AvatarImage src={memberUser.imageUrl} />
+                              <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate flex items-center gap-2">
+                                {memberUser.name} 
+                                {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
+                              </p>
+                            </div>
+                            
+                            {isThisUserAdmin && (
+                              <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
+                                <Crown className="h-3 w-3" /> Admin
+                              </div>
+                            )}
+
+                            {isAdmin && !isMe && (
+                              <button 
+                                onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
+                                className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
+                                title={`Kick ${memberUser.name}`}
+                              >
+                                <UserMinus className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* NEW: Add Member Button for Admin */}
+                    {isAdmin && (
+                      <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingMember(true)}>
+                        <UserPlus className="h-4 w-4 mr-2" /> Add Members
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
@@ -579,19 +652,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               <div className="flex justify-end">
                 <Skeleton className="h-10 w-[40%] rounded-2xl rounded-br-sm bg-zinc-200 dark:bg-zinc-800" />
               </div>
-              <div className="flex justify-end">
-                <Skeleton className="h-16 w-[50%] rounded-2xl rounded-br-sm bg-zinc-200 dark:bg-zinc-800" />
-              </div>
-              <div className="flex justify-start">
-                <Skeleton className="h-10 w-[45%] rounded-2xl rounded-bl-sm bg-zinc-200 dark:bg-zinc-800" />
-              </div>
             </div>
           ) : messages.length === 0 ? (
              <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
               <MessageCircle className="h-12 w-12 text-muted-foreground" />
-              <p className="text-sm font-medium text-muted-foreground">
-                No messages yet. Be the first to say hi!
-              </p>
+              <p className="text-sm font-medium text-muted-foreground">No messages yet. Be the first to say hi!</p>
             </div>
           ) : (
             messages.map((msg, index) => {
@@ -608,7 +673,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 (msg.reactions || []).filter(r => r.userId === user?.id).map(r => r.emoji)
               );
 
-              // Get the replied message data to show the Quoted Bubble!
               const repliedMessage = msg.replyTo ? messages.find(m => m._id === msg.replyTo) : null;
               const repliedSenderName = repliedMessage 
                 ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName)) 
@@ -624,7 +688,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
                   onTouchMove={(e) => handleTouchMove(e, msg._id)}
                   style={{
-                    // The actual swipe physics movement!
                     transform: `translateX(${swipeOffset[msg._id] || 0}px)`,
                     transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
@@ -662,7 +725,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
                       }`}
                     >
-                      {/* Quoted Message Bubble Render */}
                       {repliedMessage && !msg.isDeleted && (
                         <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
                              onClick={() => {
@@ -783,7 +845,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             })
           )}
 
-          {typingIndicators && typingIndicators.length > 0 && (
+          {activeTypingUsers.length > 0 && (
             <div className="flex items-center gap-2 mt-2">
                {isGroup && <div className="w-8 shrink-0" />} 
                <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
@@ -791,8 +853,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
                </div>
+               {/* FIX #2: Dynamic typing names rendered here! */}
                <span className="text-xs text-muted-foreground animate-pulse">
-                 {typingIndicators.length === 1 ? `${otherUserName.split(',')[0]} is typing...` : "Several people are typing..."}
+                 {typingText}
                </span>
             </div>
           )}
@@ -815,9 +878,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </Button>
       )}
 
-      <div className="border-t bg-white dark:bg-zinc-950 relative">
+      <div className="border-t bg-white dark:bg-zinc-950 relative z-20">
         
-        {/* Floating Mention Menu */}
         {mentionQuery !== null && isGroup && (
           <div className="absolute bottom-full left-4 mb-2 w-64 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
             <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -851,7 +913,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           </div>
         )}
 
-        {/* Replying To Preview UI */}
         {replyingTo && (
           <div className="mx-4 mt-3 mb-1 p-3 bg-zinc-100 dark:bg-zinc-900/80 border-l-4 border-blue-500 rounded-xl flex justify-between items-center animate-in slide-in-from-bottom-2 duration-200">
             <div className="flex flex-col min-w-0 pr-4">
