@@ -41,6 +41,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const markAsRead = useMutation(api.conversations.markAsRead);
   
   const [newMessage, setNewMessage] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
 
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -113,12 +114,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     };
   }, [conversationId, stopTyping]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewMessage(value);
 
     if (value.trim() === "") {
       stopTyping({ conversationId });
+      setMentionQuery(null); // Clear menu if empty
       return;
     }
 
@@ -126,6 +128,20 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (now - lastTypingTimeRef.current > 1000) {
       startTyping({ conversationId });
       lastTypingTimeRef.current = now;
+    }
+
+    // NEW: @Mention Detection Logic
+    if (isGroup && !isPastMember) {
+      const cursorPosition = e.target.selectionStart || 0;
+      const textBeforeCursor = value.slice(0, cursorPosition);
+      // Look for an "@" followed by letters/numbers right before the cursor
+      const match = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/);
+
+      if (match) {
+        setMentionQuery(match[1].toLowerCase());
+      } else {
+        setMentionQuery(null);
+      }
     }
   };
 
@@ -219,6 +235,37 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
       console.error(error);
       toast.error("Could not start chat");
     }
+  };
+  // NEW: Insert the chosen member into the text box
+  const handleMentionSelect = (name: string) => {
+    if (mentionQuery === null) return;
+    const formattedName = name.replace(/\s+/g, ""); // Remove spaces for the tag (e.g., "Yash Kumar" -> "@YashKumar")
+    const lastAtIndex = newMessage.lastIndexOf("@" + mentionQuery);
+    
+    if (lastAtIndex !== -1) {
+      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + mentionQuery.length);
+      setNewMessage(newValue);
+    }
+    setMentionQuery(null);
+  };
+
+  // NEW: Render text with blue mention badges
+  const renderMessageContent = (text: string) => {
+    if (!isGroup) return <p className="text-sm">{text}</p>;
+    
+    // Split the message by words that start with @
+    const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
+    
+    return (
+      <p className="text-sm">
+        {parts.map((part, i) => {
+          if (part.startsWith("@")) {
+            return <span key={i} className="text-blue-500 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/50 px-1 rounded-md">{part}</span>;
+          }
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+    );
   };
 
   return (
@@ -471,7 +518,7 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
                           This message was deleted
                         </div>
                       ) : (
-                        <p className="text-sm">{msg.content}</p>
+                        renderMessageContent(msg.content)
                       )}
 
                       {msg.reactions && msg.reactions.length > 0 && !msg.isDeleted && (
@@ -592,7 +639,42 @@ const confirmLeaveGroup = async (deleteHistory: boolean) => {
         </Button>
       )}
 
-      <div className="p-4 border-t bg-white dark:bg-zinc-950">
+      <div className="p-4 border-t bg-white dark:bg-zinc-950 relative">
+        
+        {/* NEW: Floating Mention Menu */}
+        {mentionQuery !== null && isGroup && (
+          <div className="absolute bottom-full left-4 mb-2 w-64 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
+            <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Members
+            </div>
+            <div className="max-h-48 overflow-y-auto p-1">
+              {groupDetails?.groupMembers
+                ?.map(id => users?.find(u => u.clerkId === id))
+                .filter(u => u && u.name?.replace(/\s+/g, "").toLowerCase().includes(mentionQuery))
+                .map(u => {
+                  if (!u) return null;
+                  return (
+                    <button
+                      key={u.clerkId}
+                      type="button"
+                      onClick={() => handleMentionSelect(u.name || "User")}
+                      className="w-full flex items-center gap-2 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors text-left"
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={u.imageUrl} />
+                        <AvatarFallback className="text-[10px]">{u.name?.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm font-medium">{u.name}</span>
+                    </button>
+                  )
+                })}
+              {groupDetails?.groupMembers?.length === 0 && (
+                 <div className="p-3 text-sm text-center text-muted-foreground">No matching members</div>
+              )}
+            </div>
+          </div>
+        )}
+
         {isPastMember ? (
           <div className="flex items-center justify-center p-2 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
             You left this group. You cannot send new messages.
