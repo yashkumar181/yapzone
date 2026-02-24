@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-import { Search, Loader2, SearchX, MessageSquare, Users, X, Check } from "lucide-react";
+import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -13,6 +13,7 @@ import { UserButton , useUser } from "@clerk/nextjs";
 import { formatMessageTime } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./ThemeToggle";
+import { toast } from "sonner";
 
 interface SidebarProps {
   onSelectChat: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void;
@@ -31,6 +32,9 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const createGroup = useMutation(api.conversations.createGroup);
   const markAsRead = useMutation(api.conversations.markAsRead);
   
+  // NEW: The Delete Mutation!
+  const deleteChatMutation = useMutation(api.conversations.deleteConversation);
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState<string | null>(null);
   const [chatFilter, setChatFilter] = useState<"all" | "dms" | "groups">("all");
@@ -39,6 +43,17 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+
+  // NEW: Context Menu State for Right-Click & Long-Press
+  const [contextMenu, setContextMenu] = useState<{ id: Id<"conversations">, x: number, y: number } | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Close context menu if you click anywhere else
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, []);
 
   const filteredUsers = users?.filter((user) =>
     user.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -71,6 +86,16 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       await markAsRead({ conversationId: conv._id });
     } catch (error) {
       console.error("Failed to mark as read:", error);
+    }
+  };
+
+  const handleDeleteChat = async (conversationId: Id<"conversations">) => {
+    try {
+      await deleteChatMutation({ conversationId });
+      toast.success("Chat deleted");
+      setContextMenu(null);
+    } catch (error) {
+      toast.error("Failed to delete chat");
     }
   };
 
@@ -109,9 +134,43 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     return "";
   };
 
+  // NEW: Touch Event Handlers for Long Press Mobile Deletion
+  const handleTouchStart = (e: React.TouchEvent, convId: Id<"conversations">) => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    const touch = e.touches[0];
+    longPressTimerRef.current = setTimeout(() => {
+      setContextMenu({ id: convId, x: touch.clientX, y: touch.clientY });
+      if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    }, 500); // 500ms long press
+  };
+
+  const handleTouchEndOrMove = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+
   return (
-    <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col relative">
+    <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col relative" onContextMenu={(e) => e.preventDefault()}>
       
+      {/* NEW: Global Context Menu UI */}
+      {contextMenu && (
+        <div 
+          className="fixed z-[100] bg-white dark:bg-zinc-900 border dark:border-zinc-800 shadow-xl rounded-xl py-1 w-48 animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button 
+            className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 transition-colors"
+            onClick={() => handleDeleteChat(contextMenu.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Chat
+          </button>
+        </div>
+      )}
+
+      {/* Group Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
           <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
@@ -275,65 +334,77 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </div>
             ) : (
               filteredConversations.map((conv) => (
-                <button
+                <div 
                   key={conv._id}
-                  className="w-[calc(100%-16px)] mx-2 my-1 flex items-center gap-3 p-3 rounded-xl cursor-pointer bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-white/5 shadow-sm hover:shadow-md hover:bg-zinc-50 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left group relative"
-                  onClick={() => handleSelectConversation(conv)}
+                  className="relative"
+                  // Desktop Right Click Handler
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ id: conv._id, x: e.clientX, y: e.clientY });
+                  }}
                 >
-                  
-                  <div className="relative shrink-0 flex items-center">
-                    {conv.isGroup ? (
-                       <Avatar className="h-10 w-10 rounded-xl border border-black/5 dark:border-white/10 shadow-sm transition-colors">
-                         {/* UPDATED: Displays the custom groupImageUrl! */}
-                         <AvatarImage src={conv.groupImageUrl} className="object-cover" />
-                         <AvatarFallback className="rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/50 dark:to-blue-800/50 text-blue-700 dark:text-blue-300 font-bold">
-                           {conv.groupName?.substring(0, 2).toUpperCase()}
-                         </AvatarFallback>
-                       </Avatar>
-                    ) : (
-                      <div className="relative">
-                        <Avatar className="border border-black/5 dark:border-white/10 shadow-sm">
-                          <AvatarImage src={conv.otherUser?.imageUrl} />
-                          <AvatarFallback>{conv.otherUser?.name?.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        {isOnline(conv.otherUser?.lastSeen) && (
-                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-50 dark:border-zinc-950 rounded-full z-10"></span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-1">
-                      <span className={`truncate text-sm ${conv.unreadCount > 0 ? "font-bold text-zinc-900 dark:text-zinc-100" : "font-semibold text-zinc-700 dark:text-zinc-300"}`}>
-                        {conv.isGroup ? conv.groupName : conv.otherUser?.name}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {conv.unreadCount > 0 && (
-                          <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[1.25rem] shadow-[0_0_10px_rgba(59,130,246,0.4)]">
-                            {conv.unreadCount}
-                          </span>
-                        )}
-                        {conv.lastMessage && (
-                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap ml-1 font-medium">
-                            {formatMessageTime(conv.lastMessage._creationTime)}
-                          </span>
-                        )}
-                      </div>
+                  <button
+                    className="w-[calc(100%-16px)] mx-2 my-1 flex items-center gap-3 p-3 rounded-xl cursor-pointer bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-white/5 shadow-sm hover:shadow-md hover:bg-zinc-50 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left group relative"
+                    onClick={() => handleSelectConversation(conv)}
+                    // Mobile Long Press Handlers
+                    onTouchStart={(e) => handleTouchStart(e, conv._id)}
+                    onTouchMove={handleTouchEndOrMove}
+                    onTouchEnd={handleTouchEndOrMove}
+                  >
+                    
+                    <div className="relative shrink-0 flex items-center">
+                      {conv.isGroup ? (
+                         <Avatar className="h-10 w-10 rounded-xl border border-black/5 dark:border-white/10 shadow-sm transition-colors">
+                           <AvatarImage src={conv.groupImageUrl} className="object-cover" />
+                           <AvatarFallback className="rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/50 dark:to-blue-800/50 text-blue-700 dark:text-blue-300 font-bold">
+                             {conv.groupName?.substring(0, 2).toUpperCase()}
+                           </AvatarFallback>
+                         </Avatar>
+                      ) : (
+                        <div className="relative">
+                          <Avatar className="border border-black/5 dark:border-white/10 shadow-sm">
+                            <AvatarImage src={conv.otherUser?.imageUrl} />
+                            <AvatarFallback>{conv.otherUser?.name?.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          {isOnline(conv.otherUser?.lastSeen) && (
+                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-50 dark:border-zinc-950 rounded-full z-10"></span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     
-                    <p className={`text-xs truncate transition-colors ${conv.unreadCount > 0 ? "text-blue-500 dark:text-blue-400 font-medium" : "text-zinc-500 dark:text-zinc-500"}`}>
-                      {conv.lastMessage ? (
-                         <>
-                           <span className="font-semibold text-zinc-600 dark:text-zinc-400">{getSenderPrefix(conv)}</span>
-                           <span>{conv.lastMessage.content}</span>
-                         </>
-                      ) : (
-                        <span className="font-medium">{conv.isGroup ? "Group created" : "Started a conversation"}</span>
-                      )}
-                    </p>
-                  </div>
-                </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className={`truncate text-sm ${conv.unreadCount > 0 ? "font-bold text-zinc-900 dark:text-zinc-100" : "font-semibold text-zinc-700 dark:text-zinc-300"}`}>
+                          {conv.isGroup ? conv.groupName : conv.otherUser?.name}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {conv.unreadCount > 0 && (
+                            <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[1.25rem] shadow-[0_0_10px_rgba(59,130,246,0.4)]">
+                              {conv.unreadCount}
+                            </span>
+                          )}
+                          {conv.lastMessage && (
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap ml-1 font-medium">
+                              {formatMessageTime(conv.lastMessage._creationTime)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <p className={`text-xs truncate transition-colors ${conv.unreadCount > 0 ? "text-blue-500 dark:text-blue-400 font-medium" : "text-zinc-500 dark:text-zinc-500"}`}>
+                        {conv.lastMessage ? (
+                           <>
+                             <span className="font-semibold text-zinc-600 dark:text-zinc-400">{getSenderPrefix(conv)}</span>
+                             <span>{conv.lastMessage.content}</span>
+                           </>
+                        ) : (
+                          <span className="font-medium">{conv.isGroup ? "Group created" : "Started a conversation"}</span>
+                        )}
+                      </p>
+                    </div>
+                  </button>
+                </div>
               ))
             )
           )}
