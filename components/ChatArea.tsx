@@ -9,14 +9,14 @@ import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOu
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
-import { toast } from "sonner"; 
-import { Skeleton } from "@/components/ui/skeleton"; 
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
   otherUserName: string;
-  isGroup?: boolean; 
+  isGroup?: boolean;
   onClose: () => void;
   onSwitchChat?: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void;
 }
@@ -28,18 +28,18 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
-  
+
   const messages = useQuery(api.messages.list, { conversationId });
-  const users = useQuery(api.users.getUsers); 
+  const users = useQuery(api.users.getUsers);
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
   const toggleReaction = useMutation(api.messages.react);
-  
+
   const typingIndicators = useQuery(api.typing.getActive, { conversationId });
   const startTyping = useMutation(api.typing.start);
   const stopTyping = useMutation(api.typing.stop);
   const markAsRead = useMutation(api.conversations.markAsRead);
-  
+
   const [newMessage, setNewMessage] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
@@ -60,12 +60,12 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const kickMemberMutation = useMutation(api.conversations.kickMember);
   const updateGroupDetailsMutation = useMutation(api.conversations.updateGroupDetails);
   const addMembersMutation = useMutation(api.conversations.addMembers);
-  const renameGroupMutation = useMutation(api.conversations.renameGroup); 
+  const renameGroupMutation = useMutation(api.conversations.renameGroup);
 
-  const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null);
-  const [memberToKick, setMemberToKick] = useState<{id: string, name: string} | null>(null);
+  const [memberToChat, setMemberToChat] = useState<{ id: string, name: string } | null>(null);
+  const [memberToKick, setMemberToKick] = useState<{ id: string, name: string } | null>(null);
   const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
-  const isAdmin = groupDetails?.groupAdmin === user?.id; 
+  const isAdmin = groupDetails?.groupAdmin === user?.id;
 
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
@@ -86,7 +86,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    const atBottom = scrollHeight - scrollTop <= clientHeight + 50; 
+    const atBottom = scrollHeight - scrollTop <= clientHeight + 50;
     setIsAtBottom(atBottom);
     if (atBottom) setShowScrollButton(false);
     handleGlobalTap();
@@ -100,7 +100,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   useEffect(() => {
     if (messages) {
-      markAsRead({ conversationId }).catch(() => {});
+      markAsRead({ conversationId }).catch(() => { });
       const isNewMessageAdded = messages.length > prevMessageCountRef.current;
       prevMessageCountRef.current = messages.length;
 
@@ -121,11 +121,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [typingIndicators]); 
+  }, [typingIndicators]);
 
   useEffect(() => {
     return () => {
-      stopTyping({ conversationId }).catch(() => {});
+      stopTyping({ conversationId }).catch(() => { });
     };
   }, [conversationId, stopTyping]);
 
@@ -164,7 +164,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (!navigator.onLine) return toast.error("You are offline.");
 
     const content = newMessage.trim();
-    setNewMessage(""); 
+    setNewMessage("");
     stopTyping({ conversationId });
 
     setIsAtBottom(true);
@@ -172,10 +172,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
     try {
       await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
-      setReplyingTo(null); 
+      setReplyingTo(null);
     } catch (error) {
       toast.error("Failed to send message.");
-      setNewMessage(content); 
+      setNewMessage(content);
     }
   };
 
@@ -183,12 +183,12 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (!messageToDelete) return;
     try {
       await deleteMessage({ messageId: messageToDelete, type });
-      toast.success("Message deleted"); 
+      toast.success("Message deleted");
     } catch (error) {
-      toast.error("Could not delete message."); 
+      toast.error("Could not delete message.");
     } finally {
-      setMessageToDelete(null); 
-      setMobileActiveMessage(null); 
+      setMessageToDelete(null);
+      setMobileActiveMessage(null);
     }
   };
 
@@ -196,17 +196,17 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     try {
       await toggleReaction({ messageId: msgId, emoji });
     } catch (error) {
-      toast.error("Could not add reaction."); 
+      toast.error("Could not add reaction.");
     }
   };
-  
+
   const handleTouchStart = (e: React.TouchEvent, msgId: Id<"messages">) => {
     if (mobileActiveMessage !== msgId) {
       setMobileActiveMessage(null);
       setSelectedMessageForReaction(null);
     }
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => setMobileActiveMessage(msgId), 400); 
+    longPressTimerRef.current = setTimeout(() => setMobileActiveMessage(msgId), 400);
     swipeStartRef.current = { id: msgId, x: e.touches[0].clientX };
   };
 
@@ -243,7 +243,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       await leaveGroupMutation({ conversationId, deleteHistory });
       toast.success(deleteHistory ? "Group deleted" : "Left the group");
       setShowLeaveModal(false);
-      onClose(); 
+      onClose();
     } catch (error) {
       toast.error("Failed to process request");
     }
@@ -263,10 +263,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const handleMentionSelect = (name: string) => {
     if (mentionQuery === null) return;
-    const formattedName = name.replace(/\s+/g, ""); 
+    const formattedName = name.replace(/\s+/g, "");
     const lastAtIndex = newMessage.lastIndexOf("@" + mentionQuery);
     if (lastAtIndex !== -1) {
-      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + 1 + mentionQuery.length); 
+      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + 1 + mentionQuery.length);
       setNewMessage(newValue);
     }
     setMentionQuery(null);
@@ -296,7 +296,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         imageUrl: editImgValue.trim() || undefined,
       });
       if (editNameValue.trim() !== groupDetails?.groupName) {
-         await renameGroupMutation({ conversationId, newName: editNameValue });
+        await renameGroupMutation({ conversationId, newName: editNameValue });
       }
       setIsEditingGroup(false);
       toast.success("Group details updated!");
@@ -315,7 +315,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_SIZE = 256; 
+        const MAX_SIZE = 256;
         let width = img.width;
         let height = img.height;
 
@@ -334,7 +334,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         ctx?.drawImage(img, 0, 0, width, height);
-        
+
         // Convert to highly-compressed jpeg to save safely in Convex string field
         const base64String = canvas.toDataURL("image/jpeg", 0.8);
         setEditImgValue(base64String);
@@ -345,7 +345,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   };
 
   const handleKickMemberClick = (e: React.MouseEvent, memberId: string, memberName: string) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     setMemberToKick({ id: memberId, name: memberName });
   };
 
@@ -357,7 +357,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     } catch (error) {
       toast.error("Failed to remove member");
     } finally {
-      setMemberToKick(null); 
+      setMemberToKick(null);
     }
   };
 
@@ -377,15 +377,14 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     const u = users?.find(u => u.clerkId === t.userId);
     return u ? u.name?.split(' ')[0] : "Someone";
   });
-  
+
   let typingText = "";
   if (typingNames.length === 1) typingText = `${typingNames[0]} is typing...`;
   else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
   else if (typingNames.length > 2) typingText = "Several people are typing...";
 
   return (
-    <div className="flex-1 flex flex-col h-full relative" onClick={handleGlobalTap}>
-      
+    <div className="flex-1 flex flex-col h-full relative overflow-hidden" onClick={handleGlobalTap}>
       {/* Existing Message Delete Modal */}
       {messageToDelete && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
@@ -477,13 +476,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div 
+        <div
           className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
           onClick={() => isGroup && setShowGroupInfo(true)}
         >
           <div className="flex items-center gap-2">
             {isGroup && groupDetails?.groupImageUrl && (
-               <img src={groupDetails.groupImageUrl} alt="Group" className="w-6 h-6 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" />
+              <img src={groupDetails.groupImageUrl} alt="Group" className="w-6 h-6 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" />
             )}
             <h3 className="font-semibold text-lg">{isGroup ? groupDetails?.groupName || otherUserName : otherUserName}</h3>
           </div>
@@ -494,13 +493,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       {/* Group Info Drawer */}
       {showGroupInfo && isGroup && groupDetails && (
         <>
-          <div 
-            className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all" 
-            onClick={() => { setShowGroupInfo(false); setIsEditingGroup(false); setIsAddingMember(false); }} 
+          <div
+            className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all"
+            onClick={() => { setShowGroupInfo(false); setIsEditingGroup(false); setIsAddingMember(false); }}
           />
-          
+
           <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-            
+
             <div className="p-4 border-b flex items-center gap-3 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
               <Button variant="ghost" size="icon" onClick={() => setShowGroupInfo(false)} className="-ml-2 shrink-0">
                 <X className="h-5 w-5" />
@@ -509,23 +508,23 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              
+
               {isAddingMember ? (
                 <div className="space-y-4 animate-in fade-in">
-                  <Input 
-                    placeholder="Search users to add..." 
+                  <Input
+                    placeholder="Search users to add..."
                     value={addMemberQuery}
                     onChange={(e) => setAddMemberQuery(e.target.value)}
                     className="bg-zinc-100 dark:bg-zinc-900"
                   />
                   <div className="space-y-2">
-                    {users?.filter(u => 
-                      !groupDetails.groupMembers?.includes(u.clerkId) && 
+                    {users?.filter(u =>
+                      !groupDetails.groupMembers?.includes(u.clerkId) &&
                       u.name?.toLowerCase().includes(addMemberQuery.toLowerCase())
                     ).map(u => (
                       <div key={u._id} className="flex items-center justify-between p-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8"><AvatarImage src={u.imageUrl}/><AvatarFallback>{u.name?.charAt(0)}</AvatarFallback></Avatar>
+                          <Avatar className="h-8 w-8"><AvatarImage src={u.imageUrl} /><AvatarFallback>{u.name?.charAt(0)}</AvatarFallback></Avatar>
                           <span className="text-sm font-medium">{u.name}</span>
                         </div>
                         <Button size="sm" onClick={() => handleAddNewMember(u.clerkId)}>Add</Button>
@@ -537,7 +536,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               ) : (
                 <>
                   <div className="text-center space-y-3">
-                    
+
                     {/* The Custom Upload Avatar and Pencil Edit Button! */}
                     <div className="relative inline-block mx-auto">
                       {groupDetails.groupImageUrl ? (
@@ -547,16 +546,16 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           <Users className="h-10 w-10 text-muted-foreground" />
                         </div>
                       )}
-                      
+
                       {/* THIS is the new pencil button: Always visible, stuck to bottom right */}
                       {isAdmin && !isEditingGroup && (
-                        <button 
-                          onClick={() => { 
-                            setEditNameValue(groupDetails.groupName || ""); 
+                        <button
+                          onClick={() => {
+                            setEditNameValue(groupDetails.groupName || "");
                             setEditDescValue(groupDetails.groupDescription || "");
                             setEditImgValue(groupDetails.groupImageUrl || "");
-                            setIsEditingGroup(true); 
-                          }} 
+                            setIsEditingGroup(true);
+                          }}
                           className="absolute -bottom-2 -right-2 bg-zinc-900 text-white dark:bg-white dark:text-black p-2 rounded-full shadow-md hover:scale-110 transition-transform z-10"
                           title="Edit Group Details"
                         >
@@ -564,25 +563,25 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         </button>
                       )}
                     </div>
-                    
+
                     {isEditingGroup ? (
                       <div className="flex flex-col gap-3 mx-auto animate-in fade-in p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 text-left mt-2">
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Group Name</label>
-                          <Input value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" autoFocus/>
+                          <Input value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" autoFocus />
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Description</label>
-                          <Input placeholder="What's this group about?" value={editDescValue} onChange={(e) => setEditDescValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1"/>
+                          <Input placeholder="What's this group about?" value={editDescValue} onChange={(e) => setEditDescValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" />
                         </div>
-                        
+
                         {/* Native Input File Upload */}
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Update Image</label>
-                          <Input 
-                            type="file" 
+                          <Input
+                            type="file"
                             accept="image/*"
-                            onChange={handleImageUpload} 
+                            onChange={handleImageUpload}
                             className="h-8 bg-white dark:bg-zinc-950 mt-1 text-xs cursor-pointer file:mr-2 file:py-0 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-900 hover:file:bg-zinc-200"
                           />
                         </div>
@@ -619,8 +618,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         if (!memberUser) return null;
 
                         return (
-                          <div 
-                            key={memberId} 
+                          <div
+                            key={memberId}
                             className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
                             onClick={() => {
                               if (!isMe) setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
@@ -632,11 +631,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-sm truncate flex items-center gap-2">
-                                {memberUser.name} 
+                                {memberUser.name}
                                 {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
                               </p>
                             </div>
-                            
+
                             {isThisUserAdmin && (
                               <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
                                 <Crown className="h-3 w-3" /> Admin
@@ -644,7 +643,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                             )}
 
                             {isAdmin && !isMe && (
-                              <button 
+                              <button
                                 onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
                                 className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
                                 title={`Kick ${memberUser.name}`}
@@ -656,7 +655,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         );
                       })}
                     </div>
-                    
+
                     {isAdmin && (
                       <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingMember(true)}>
                         <UserPlus className="h-4 w-4 mr-2" /> Add Members
@@ -668,10 +667,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-               <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
-                 <LogOut className="h-4 w-4 mr-2" />
-                 Leave Group
-               </Button>
+              <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Leave Group
+              </Button>
             </div>
           </div>
         </>
@@ -690,7 +689,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               </div>
             </div>
           ) : messages.length === 0 ? (
-             <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
+            <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
               <MessageCircle className="h-12 w-12 text-muted-foreground" />
               <p className="text-sm font-medium text-muted-foreground">No messages yet. Be the first to say hi!</p>
             </div>
@@ -710,15 +709,15 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               );
 
               const repliedMessage = msg.replyTo ? messages.find(m => m._id === msg.replyTo) : null;
-              const repliedSenderName = repliedMessage 
-                ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName)) 
+              const repliedSenderName = repliedMessage
+                ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName))
                 : "Someone";
 
               const isSwiping = (swipeOffset[msg._id] || 0) > 0;
 
               return (
-                <div 
-                  key={msg._id} 
+                <div
+                  key={msg._id}
                   className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"}`}
                   onTouchStart={(e) => handleTouchStart(e, msg._id)}
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
@@ -728,7 +727,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
                 >
-                  
+
                   {isGroup && !isMe && isFirstInGroup && sender && (
                     <span className="text-[10px] font-medium text-muted-foreground ml-10 mb-0.5">
                       {sender.name}
@@ -736,37 +735,36 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   )}
 
                   <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} relative`}>
-                    
+
                     {isGroup && !isMe && (
                       <div className="w-8 shrink-0 flex justify-center">
-                         {isFirstInGroup ? (
-                            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity border border-black/5 dark:border-white/10 shadow-sm" onClick={() => {
-                              setMemberToChat({ id: sender?.clerkId || "", name: sender?.name || "User" });
-                            }}>
-                              <AvatarImage src={sender?.imageUrl} />
-                              <AvatarFallback className="text-[10px]">{sender?.name?.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                         ) : (
-                           <div className="w-8" /> 
-                         )}
+                        {isFirstInGroup ? (
+                          <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity border border-black/5 dark:border-white/10 shadow-sm" onClick={() => {
+                            setMemberToChat({ id: sender?.clerkId || "", name: sender?.name || "User" });
+                          }}>
+                            <AvatarImage src={sender?.imageUrl} />
+                            <AvatarFallback className="text-[10px]">{sender?.name?.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <div className="w-8" />
+                        )}
                       </div>
                     )}
 
                     <div
-                      className={`max-w-[75%] px-4 py-2 relative flex flex-col gap-1 ${
-                        msg.isDeleted
+                      className={`max-w-[75%] px-4 py-2 relative flex flex-col gap-1 ${msg.isDeleted
                           ? "bg-transparent border border-zinc-200 dark:border-zinc-800 text-muted-foreground italic rounded-2xl"
                           : isMe
-                          ? "bg-black text-white dark:bg-white dark:text-black rounded-2xl rounded-br-sm shadow-sm"
-                          : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
-                      }`}
+                            ? "bg-black text-white dark:bg-white dark:text-black rounded-2xl rounded-br-sm shadow-sm"
+                            : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
+                        }`}
                     >
                       {repliedMessage && !msg.isDeleted && (
                         <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
-                             onClick={() => {
-                               const el = document.getElementById(`msg-${repliedMessage._id}`);
-                               el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                             }}
+                          onClick={() => {
+                            const el = document.getElementById(`msg-${repliedMessage._id}`);
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }}
                         >
                           <span className="font-bold block mb-0.5">{repliedSenderName}</span>
                           <span className="line-clamp-2">{repliedMessage.content}</span>
@@ -793,11 +791,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                                 e.stopPropagation();
                                 handleToggleReaction(msg._id, emoji);
                               }}
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full border shadow-sm transition-transform hover:scale-110 flex items-center gap-1 ${
-                                myReactions.has(emoji)
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full border shadow-sm transition-transform hover:scale-110 flex items-center gap-1 ${myReactions.has(emoji)
                                   ? "bg-blue-100 border-blue-200 dark:bg-blue-900/50 dark:border-blue-800"
                                   : "bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
-                              }`}
+                                }`}
                             >
                               <span>{emoji}</span>
                               <span className="font-bold text-muted-foreground">{count}</span>
@@ -808,10 +805,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     </div>
 
                     {!msg.isDeleted && (
-                      <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${
-                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      }`}>
-                        
+                      <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        }`}>
+
                         <div className="relative">
                           <button
                             onClick={(e) => {
@@ -824,9 +820,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           </button>
 
                           {selectedMessageForReaction === msg._id && (
-                            <div 
+                            <div
                               className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200"
-                              onClick={(e) => e.stopPropagation()} 
+                              onClick={(e) => e.stopPropagation()}
                             >
                               {EMOJIS.map((emoji) => (
                                 <button
@@ -835,7 +831,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                                     e.stopPropagation();
                                     handleToggleReaction(msg._id, emoji);
                                     setSelectedMessageForReaction(null);
-                                    setMobileActiveMessage(null); 
+                                    setMobileActiveMessage(null);
                                   }}
                                   className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125"
                                 >
@@ -872,7 +868,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       </div>
                     )}
                   </div>
-                  
+
                   <span className={`text-[10px] text-muted-foreground ${isGroup && !isMe ? "ml-10" : "px-1"} ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
                     {formatMessageTime(msg._creationTime)}
                   </span>
@@ -883,24 +879,24 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
           {activeTypingUsers.length > 0 && (
             <div className="flex items-center gap-2 mt-2">
-               {isGroup && <div className="w-8 shrink-0" />} 
-               <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
-                 <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                 <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                 <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
-               </div>
-               <span className="text-xs text-muted-foreground animate-pulse">
-                 {typingText}
-               </span>
+              {isGroup && <div className="w-8 shrink-0" />}
+              <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
+                <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
+              </div>
+              <span className="text-xs text-muted-foreground animate-pulse">
+                {typingText}
+              </span>
             </div>
           )}
-          
+
           <div ref={scrollRef} />
         </div>
       </div>
 
       {showScrollButton && (
-        <Button 
+        <Button
           onClick={(e) => {
             e.stopPropagation();
             scrollToBottom();
@@ -913,8 +909,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </Button>
       )}
 
-      <div className="border-t bg-white dark:bg-zinc-950 relative z-20">
-        
+      <div className="border-t bg-white dark:bg-zinc-950 relative z-20 shrink-0 pb-1">
+
         {mentionQuery !== null && isGroup && (
           <div className="absolute bottom-full left-4 mb-2 w-64 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
             <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -942,7 +938,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   )
                 })}
               {groupDetails?.groupMembers?.length === 0 && (
-                 <div className="p-3 text-sm text-center text-muted-foreground">No matching members</div>
+                <div className="p-3 text-sm text-center text-muted-foreground">No matching members</div>
               )}
             </div>
           </div>

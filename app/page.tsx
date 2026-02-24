@@ -16,7 +16,7 @@ export default function Home() {
   
   const [activeChatId, setActiveChatId] = useState<Id<"conversations"> | null>(null);
   const [activeChatName, setActiveChatName] = useState<string | null>(null);
-  const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // NEW
+  const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false);
 
   useEffect(() => {
     if (user) {
@@ -38,7 +38,6 @@ export default function Home() {
     return () => clearInterval(intervalId);
   }, [user, updatePresence]);
 
-  // UPDATED: Now accepts isGroup
   const handleSelectChat = (conversationId: Id<"conversations">, name: string, isGroup: boolean = false) => {
     setActiveChatId(conversationId);
     setActiveChatName(name);
@@ -54,7 +53,8 @@ export default function Home() {
   if (!isLoaded) return null;
 
   return (
-    <main className="flex h-screen bg-white dark:bg-black overflow-hidden">
+    // FIX: Changed h-screen to h-[100dvh] to prevent mobile browser UI shifting
+    <main className="flex h-[100dvh] bg-white dark:bg-black overflow-hidden">
       <div className={`${activeChatId ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
         <Sidebar onSelectChat={handleSelectChat} />
       </div>
@@ -74,7 +74,7 @@ export default function Home() {
           <ChatArea 
             conversationId={activeChatId} 
             otherUserName={activeChatName || "Unknown"} 
-            isGroup={activeChatIsGroup} // NEW
+            isGroup={activeChatIsGroup} 
             onClose={handleCloseChat} 
             onSwitchChat={handleSelectChat}
           />
