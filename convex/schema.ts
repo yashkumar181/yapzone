@@ -38,6 +38,7 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     senderId: v.string(),
     content: v.string(),
+    replyTo: v.optional(v.id("messages")),
     isDeleted: v.optional(v.boolean()),
     deletedFor: v.optional(v.array(v.string())),
     reactions: v.optional(

@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, UserMinus } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, UserMinus, Reply } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
@@ -63,11 +63,15 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
   const isAdmin = groupDetails?.groupAdmin === user?.id; 
 
-  // Admin Moderation Mutations & State
   const renameGroupMutation = useMutation(api.conversations.renameGroup);
   const kickMemberMutation = useMutation(api.conversations.kickMember);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+
+  // NEW: Reply System State & Swipe Physics!
+  const [replyingTo, setReplyingTo] = useState<{ id: Id<"messages">; content: string; senderName: string } | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState<{ [key: string]: number }>({});
+  const swipeStartRef = useRef<{ id: string; x: number } | null>(null);
 
   const handleGlobalTap = () => {
     if (mobileActiveMessage) setMobileActiveMessage(null);
@@ -106,14 +110,12 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, conversationId, markAsRead, isGroup]); 
 
   useEffect(() => {
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typingIndicators]); 
 
   useEffect(() => {
@@ -138,7 +140,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       lastTypingTimeRef.current = now;
     }
 
-    // @Mention Detection Logic
     if (isGroup && !isPastMember) {
       const cursorPosition = e.target.selectionStart || 0;
       const textBeforeCursor = value.slice(0, cursorPosition);
@@ -169,7 +170,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
 
     try {
-      await sendMessage({ conversationId, content });
+      // UPDATED: Now sends the reply ID to the backend!
+      await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
+      setReplyingTo(null); // Clear the reply preview UI
     } catch (error) {
       console.error("Failed to send message:", error);
       toast.error("Failed to send message. Please try again.");
@@ -200,23 +203,58 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     }
   };
   
-  const handleTouchStart = (msgId: Id<"messages">) => {
+  // NEW: Integrated Swipe Physics & Long Press!
+  const handleTouchStart = (e: React.TouchEvent, msgId: Id<"messages">) => {
+    // 1. Setup Long Press for Mobile Menu
     if (mobileActiveMessage !== msgId) {
       setMobileActiveMessage(null);
       setSelectedMessageForReaction(null);
     }
-
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
       setMobileActiveMessage(msgId);
     }, 400); 
+
+    // 2. Setup Swipe Physics Initial Coordinates
+    swipeStartRef.current = { id: msgId, x: e.touches[0].clientX };
   };
 
-  const handleTouchEndOrMove = () => {
+  const handleTouchMove = (e: React.TouchEvent, msgId: Id<"messages">) => {
+    // Cancel long press if they are scrolling or swiping
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+
+    // Handle Swipe Right to Reply
+    if (!swipeStartRef.current || swipeStartRef.current.id !== msgId) return;
+    const diff = e.touches[0].clientX - swipeStartRef.current.x;
+    
+    // Only allow swiping right, max resistance at 70px
+    if (diff > 0 && diff < 70) {
+      setSwipeOffset(prev => ({ ...prev, [msgId]: diff }));
+    }
+  };
+
+  const handleTouchEnd = (msgId: Id<"messages">, content: string, senderName: string) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    // If they swiped far enough, trigger the reply state!
+    const diff = swipeOffset[msgId] || 0;
+    if (diff > 45) {
+      setReplyingTo({ id: msgId, content, senderName });
+      // Haptic feedback if supported on mobile
+      if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    }
+
+    // Snap the message bubble back to 0 instantly
+    setSwipeOffset(prev => ({ ...prev, [msgId]: 0 }));
+    swipeStartRef.current = null;
   };
 
   const confirmLeaveGroup = async (deleteHistory: boolean) => {
@@ -260,10 +298,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   };
 
   const renderMessageContent = (text: string) => {
-    if (!isGroup) return <p className="text-sm">{text}</p>;
+    if (!isGroup) return <p className="text-sm leading-relaxed">{text}</p>;
     const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
     return (
-      <p className="text-sm">
+      <p className="text-sm leading-relaxed">
         {parts.map((part, i) => {
           if (part.startsWith("@")) {
             return <span key={i} className="text-blue-500 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/50 px-1 rounded-md">{part}</span>;
@@ -274,7 +312,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     );
   };
 
-  // Admin Rename Handler
   const handleRenameGroup = async () => {
     if (!editNameValue.trim() || editNameValue.trim() === groupDetails?.groupName) {
       setIsEditingName(false);
@@ -289,13 +326,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     }
   };
 
-  // Opens the beautiful custom kick modal
   const handleKickMemberClick = (e: React.MouseEvent, memberId: string, memberName: string) => {
     e.stopPropagation(); 
     setMemberToKick({ id: memberId, name: memberName });
   };
 
-  // Actually executes the kick from the modal
   const confirmKickMember = async () => {
     if (!memberToKick) return;
     try {
@@ -304,7 +339,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     } catch (error) {
       toast.error("Failed to remove member");
     } finally {
-      setMemberToKick(null); // Close the modal
+      setMemberToKick(null); 
     }
   };
 
@@ -357,7 +392,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </div>
       )}
 
-      {/* NEW: Custom Kick Member Modal */}
+      {/* Custom Kick Member Modal */}
       {memberToKick && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -406,7 +441,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
           onClick={() => isGroup && setShowGroupInfo(true)}
         >
-          {/* Dynamic header updates instantly when group is renamed */}
           <h3 className="font-semibold text-lg">{isGroup ? groupDetails?.groupName || otherUserName : otherUserName}</h3>
           {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Tap here for group info</span>}
         </div>
@@ -429,7 +463,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 <Users className="h-10 w-10 text-muted-foreground" />
               </div>
               
-              {/* Admin Rename UI */}
               {isEditingName ? (
                 <div className="flex items-center gap-2 justify-center max-w-[200px] mx-auto animate-in fade-in">
                   <Input 
@@ -486,7 +519,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         }
                       }}
                     >
-                      <Avatar className="h-10 w-10">
+                      <Avatar className="h-10 w-10 border border-black/5 dark:border-white/10 shadow-sm">
                         <AvatarImage src={memberUser.imageUrl} />
                         <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
                       </Avatar>
@@ -503,7 +536,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         </div>
                       )}
 
-                      {/* Admin Kick Button (Permanently visible on mobile, hover on desktop) */}
                       {isAdmin && !isMe && (
                         <button 
                           onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
@@ -569,13 +601,26 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 (msg.reactions || []).filter(r => r.userId === user?.id).map(r => r.emoji)
               );
 
+              // NEW: Get the replied message data to show the Quoted Bubble!
+              const repliedMessage = msg.replyTo ? messages.find(m => m._id === msg.replyTo) : null;
+              const repliedSenderName = repliedMessage 
+                ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName)) 
+                : "Someone";
+
+              const isSwiping = (swipeOffset[msg._id] || 0) > 0;
+
               return (
                 <div 
                   key={msg._id} 
                   className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"}`}
-                  onTouchStart={() => handleTouchStart(msg._id)}
-                  onTouchEnd={handleTouchEndOrMove}
-                  onTouchMove={handleTouchEndOrMove}
+                  onTouchStart={(e) => handleTouchStart(e, msg._id)}
+                  onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
+                  onTouchMove={(e) => handleTouchMove(e, msg._id)}
+                  style={{
+                    // NEW: The actual swipe physics movement!
+                    transform: `translateX(${swipeOffset[msg._id] || 0}px)`,
+                    transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                  }}
                 >
                   
                   {isGroup && !isMe && isFirstInGroup && sender && (
@@ -589,7 +634,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     {isGroup && !isMe && (
                       <div className="w-8 shrink-0 flex justify-center">
                          {isFirstInGroup ? (
-                            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
+                            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity border border-black/5 dark:border-white/10 shadow-sm" onClick={() => {
                               setMemberToChat({ id: sender?.clerkId || "", name: sender?.name || "User" });
                             }}>
                               <AvatarImage src={sender?.imageUrl} />
@@ -602,7 +647,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     )}
 
                     <div
-                      className={`max-w-[75%] px-4 py-2 relative ${
+                      className={`max-w-[75%] px-4 py-2 relative flex flex-col gap-1 ${
                         msg.isDeleted
                           ? "bg-transparent border border-zinc-200 dark:border-zinc-800 text-muted-foreground italic rounded-2xl"
                           : isMe
@@ -610,13 +655,30 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
                       }`}
                     >
+                      {/* NEW: Quoted Message Bubble Render */}
+                      {repliedMessage && !msg.isDeleted && (
+                        <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
+                             onClick={() => {
+                               // Optional bonus: smooth scroll up to the original message if clicked!
+                               const el = document.getElementById(`msg-${repliedMessage._id}`);
+                               el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                             }}
+                        >
+                          <span className="font-bold block mb-0.5">{repliedSenderName}</span>
+                          <span className="line-clamp-2">{repliedMessage.content}</span>
+                        </div>
+                      )}
+
                       {msg.isDeleted ? (
                         <div className="flex items-center gap-2 text-xs opacity-70">
                           <Ban className="h-3 w-3" />
                           This message was deleted
                         </div>
                       ) : (
-                        renderMessageContent(msg.content)
+                        // We add the id here so clicking a quote can scroll to it
+                        <div id={`msg-${msg._id}`}>
+                          {renderMessageContent(msg.content)}
+                        </div>
                       )}
 
                       {msg.reactions && msg.reactions.length > 0 && !msg.isDeleted && (
@@ -644,7 +706,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
                     {!msg.isDeleted && (
                       <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${
-                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 md:group-hover:opacity-100"
                       }`}>
                         
                         <div className="relative">
@@ -680,6 +742,18 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                             </div>
                           )}
                         </div>
+
+                        {/* NEW: Desktop Reply Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) });
+                          }}
+                          className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors hidden md:block"
+                          title="Reply"
+                        >
+                          <Reply className="h-4 w-4" />
+                        </button>
 
                         {isMe && (
                           <button
@@ -737,7 +811,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </Button>
       )}
 
-      <div className="p-4 border-t bg-white dark:bg-zinc-950 relative">
+      <div className="border-t bg-white dark:bg-zinc-950 relative">
         
         {/* Floating Mention Menu */}
         {mentionQuery !== null && isGroup && (
@@ -773,12 +847,25 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           </div>
         )}
 
+        {/* NEW: Replying To Preview UI */}
+        {replyingTo && (
+          <div className="mx-4 mt-3 mb-1 p-3 bg-zinc-100 dark:bg-zinc-900/80 border-l-4 border-blue-500 rounded-xl flex justify-between items-center animate-in slide-in-from-bottom-2 duration-200">
+            <div className="flex flex-col min-w-0 pr-4">
+              <span className="text-xs font-bold text-blue-500 truncate mb-0.5">Replying to {replyingTo.senderName}</span>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400 truncate">{replyingTo.content}</span>
+            </div>
+            <button onClick={() => setReplyingTo(null)} className="shrink-0 p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
+              <X className="h-4 w-4 text-zinc-500" />
+            </button>
+          </div>
+        )}
+
         {isPastMember ? (
-          <div className="flex items-center justify-center p-2 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
             You left this group. You cannot send new messages.
           </div>
         ) : (
-          <form onSubmit={handleSend} className="flex gap-2">
+          <form onSubmit={handleSend} className="flex gap-2 p-4">
             <Input
               value={newMessage}
               onChange={handleInputChange}

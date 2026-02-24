@@ -18,21 +18,37 @@ export const list = query({
   },
 });
 
+// IN YOUR convex/messages.ts
 export const send = mutation({
-  args: {
-    conversationId: v.id("conversations"),
+  args: { 
+    conversationId: v.id("conversations"), 
     content: v.string(),
+    replyTo: v.optional(v.id("messages")), // NEW: Accept the reply ID
   },
   handler: async (ctx, args) => {
-    
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
 
-    await ctx.db.insert("messages", {
+    const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
       senderId: identity.subject,
       content: args.content,
+      replyTo: args.replyTo, // NEW: Save it to the database
     });
+
+    // (Keep your existing participantOneLastRead / participantTwoLastRead update logic down here)
+    const conv = await ctx.db.get(args.conversationId);
+    if (conv) {
+      if (conv.participantOne === identity.subject) {
+        await ctx.db.patch(args.conversationId, { participantOneLastRead: Date.now() });
+      } else if (conv.participantTwo === identity.subject) {
+        await ctx.db.patch(args.conversationId, { participantTwoLastRead: Date.now() });
+      }
+    }
+
+    return messageId;
   },
 });
 
