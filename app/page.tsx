@@ -16,7 +16,7 @@ export default function Home() {
   
   const [activeChatId, setActiveChatId] = useState<Id<"conversations"> | null>(null);
   const [activeChatName, setActiveChatName] = useState<string | null>(null);
-
+const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // NEW
   // Sync user profile when they log in
   useEffect(() => {
     if (user) {
@@ -45,9 +45,10 @@ export default function Home() {
     return () => clearInterval(intervalId);
   }, [user, updatePresence]);
 
-  const handleSelectChat = (conversationId: Id<"conversations">, otherUserName: string) => {
+ const handleSelectChat = (conversationId: Id<"conversations">, name: string, isGroup: boolean = false) => {
     setActiveChatId(conversationId);
-    setActiveChatName(otherUserName);
+    setActiveChatName(name);
+    setActiveChatIsGroup(isGroup);
   };
 
   const handleCloseChat = () => {

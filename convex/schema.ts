@@ -10,22 +10,25 @@ export default defineSchema({
     lastSeen: v.optional(v.number()),
   }).index("by_clerkId", ["clerkId"]),
 
-  // NEW: A table for 1-on-1 chats between two users
+  // THE UPDATED CONVERSATIONS TABLE
   conversations: defineTable({
-    participantOne: v.string(), // Clerk ID of user 1
-    participantTwo: v.string(), // Clerk ID of user 2
-    participantOneLastRead: v.optional(v.number()), // NEW
-    participantTwoLastRead: v.optional(v.number()), // NEW
+    participantOne: v.optional(v.string()), // Must be optional
+    participantTwo: v.optional(v.string()), // Must be optional
+    participantOneLastRead: v.optional(v.number()),
+    participantTwoLastRead: v.optional(v.number()),
+    isGroup: v.optional(v.boolean()),
+    groupName: v.optional(v.string()),
+    groupMembers: v.optional(v.array(v.string())),
+    groupAdmin: v.optional(v.string()),
   })
     .index("by_participantOne", ["participantOne"])
     .index("by_participantTwo", ["participantTwo"]),
 
-  // NEW: A table for the actual messages inside a conversation
   messages: defineTable({
     conversationId: v.id("conversations"),
-    senderId: v.string(), // Clerk ID of the sender
+    senderId: v.string(),
     content: v.string(),
-    isDeleted: v.optional(v.boolean()), // NEW: Soft delete flag
+    isDeleted: v.optional(v.boolean()),
     deletedFor: v.optional(v.array(v.string())),
     reactions: v.optional(
       v.array(
@@ -36,12 +39,10 @@ export default defineSchema({
       )
     ),
   }).index("by_conversationId", ["conversationId"]),
- 
-  // NEW: Track who is typing, where, and when it expires
+
   typingIndicators: defineTable({
     conversationId: v.id("conversations"),
     userId: v.string(),
     expiresAt: v.number(),
   }).index("by_conversationId", ["conversationId"]),
 });
-
