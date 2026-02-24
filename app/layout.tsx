@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "@/components/providers/ConvexClientProvider";
-import { Toaster } from "@/components/ui/sonner"; // NEW: Import Toaster
+import { ThemeProvider } from "@/components/providers/theme-provider"; // NEW: Import ThemeProvider
+import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,12 +19,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // NEW: suppressHydrationWarning is strictly required for next-themes to work perfectly!
+    <html lang="en" suppressHydrationWarning> 
       <body className={inter.className}>
         <ConvexClientProvider>
-          {children}
+          {/* NEW: Wrap the app in the ThemeProvider */}
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
         </ConvexClientProvider>
-        <Toaster position="top-center" richColors /> {/* NEW: Mount Toaster */}
+        <Toaster position="top-center" richColors /> 
       </body>
     </html>
   );

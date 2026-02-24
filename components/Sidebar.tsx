@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserButton , useUser } from "@clerk/nextjs";
 import { formatMessageTime } from "@/lib/utils";
 import { Button } from "./ui/button";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface SidebarProps {
   onSelectChat: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void;
@@ -23,7 +24,7 @@ const isOnline = (lastSeen?: number) => {
 };
 
 export function Sidebar({ onSelectChat }: SidebarProps) {
-  const { user } = useUser(); // <-- ADD THIS LINE
+  const { user } = useUser();
   const users = useQuery(api.users.getUsers);
   const conversations = useQuery(api.conversations.list);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
@@ -33,7 +34,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState<string | null>(null);
 
-  // NEW: Group Modal States
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
@@ -67,7 +67,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     }
   };
 
-  // NEW: Handle Group Creation
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedMembers.length < 1) return;
     setIsCreatingGroup(true);
@@ -96,7 +95,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   return (
     <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col relative">
       
-      {/* NEW: Premium Group Creation Modal */}
+      {/* Premium Group Creation Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
           <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
@@ -177,22 +176,27 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* Standard Sidebar Content */}
-      <div className="p-4 border-b flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+      {/* Upgraded Header & Search Bar */}
+      <div className="pt-4 flex flex-col gap-4">
+        <div className="flex items-center justify-between px-4">
           <h2 className="text-xl font-semibold tracking-tight">Chats</h2>
           <div className="flex items-center gap-2">
+            
+            <ThemeToggle />
+            
             <Button variant="ghost" size="icon" onClick={() => setShowGroupModal(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
               <Users className="h-5 w-5" />
             </Button>
             <UserButton afterSignOutUrl="/sign-in" />
           </div>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+        
+        {/* Premium "Frosted" Search Input */}
+        <div className="relative px-4 pb-4 border-b dark:border-white/[0.08]">
+          <Search className="absolute left-7 top-2.5 h-4 w-4 text-zinc-500 dark:text-zinc-400" />
           <Input
             placeholder="Search users..."
-            className="pl-8 bg-white dark:bg-zinc-900"
+            className="pl-9 bg-zinc-200/50 dark:bg-white/[0.03] border-transparent dark:border-white/10 focus-visible:ring-1 focus-visible:ring-blue-500/50 transition-all rounded-xl shadow-inner placeholder:text-zinc-500"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -200,9 +204,9 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <div className="py-2 space-y-1">
           {searchQuery ? (
-            // Search Results (Kept identical)
+            // Search Results 
             filteredUsers === undefined ? (
                <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
             ) : filteredUsers.length === 0 ? (
@@ -212,17 +216,19 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </div>
             ) : (
               <>
-                <p className="text-xs font-medium text-muted-foreground px-2 py-2">Found Users</p>
+                <p className="text-xs font-medium text-muted-foreground px-4 py-2">Found Users</p>
                 {filteredUsers.map((user) => (
                   <button
                     key={user._id}
                     disabled={isCreating === user.clerkId}
-                    className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-left disabled:opacity-50"
+                    // Upgraded Hover & Scale Effects for Search list
+                    className="w-[calc(100%-16px)] mx-2 my-1 flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left disabled:opacity-50 disabled:active:scale-100"
                     onClick={() => handleStartChat(user.clerkId, user.name || "Unknown User")}
                   >
                     <div className="flex items-center gap-3">
                       <div className="relative">
-                        <Avatar>
+                        {/* Avatar with subtle translucent border for depth */}
+                        <Avatar className="border border-black/5 dark:border-white/10 shadow-sm">
                           <AvatarImage src={user.imageUrl} />
                           <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
                         </Avatar>
@@ -230,7 +236,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                           <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-zinc-950 rounded-full z-10"></span>
                         )}
                       </div>
-                      <span className="font-medium text-sm truncate">{user.name}</span>
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm truncate">{user.name}</span>
                     </div>
                     {isCreating === user.clerkId && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   </button>
@@ -238,10 +244,10 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </>
             )
           ) : (
-            // Conversations List (Upgraded with Stacked Avatars for Groups)
+            // Conversations List 
             conversations === undefined ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-2">
+                <div key={i} className="flex items-center gap-3 p-3 mx-2 my-1">
                   <Skeleton className="h-10 w-10 rounded-full" />
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-32" />
@@ -258,36 +264,35 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               conversations.map((conv) => (
                 <button
                   key={conv._id}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-left group relative"
+                  // Floating 'Pill' Style with Press Animation
+                  className="w-[calc(100%-16px)] mx-2 my-1 flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left group relative"
                   onClick={() => handleSelectConversation(conv)}
                 >
                   
-                  {/* Avatar Rendering: Stacked for Groups, Single for 1-on-1 */}
+                  {/* Avatar Rendering - Added translucent borders for depth */}
                   <div className="relative shrink-0 flex items-center">
                     {conv.isGroup ? (
                        <div className="flex -space-x-3 rtl:space-x-reverse relative z-0">
-                         {/* Show up to 3 avatars stacked */}
                          {(conv.groupMembers || []).slice(0, 3).map((member: any, i: number) => (
-                           <Avatar key={i} className="border-2 border-zinc-50 dark:border-zinc-950 h-10 w-10">
+                           <Avatar key={i} className="border-2 border-zinc-50 dark:border-zinc-950 h-10 w-10 transition-colors shadow-sm">
                              <AvatarImage src={member?.imageUrl} />
-                             <AvatarFallback>{member?.name?.charAt(0)}</AvatarFallback>
+                             <AvatarFallback className="border dark:border-white/10">{member?.name?.charAt(0)}</AvatarFallback>
                            </Avatar>
                          ))}
-                         {/* If more than 3 members, show a + count */}
                          {(conv.groupMembers?.length || 0) > 3 && (
-                           <div className="flex items-center justify-center h-10 w-10 rounded-full border-2 border-zinc-50 dark:border-zinc-950 bg-zinc-200 dark:bg-zinc-800 text-[10px] font-bold z-10">
+                           <div className="flex items-center justify-center h-10 w-10 rounded-full border-2 border-zinc-50 dark:border-zinc-950 bg-zinc-200 dark:bg-zinc-800 dark:border-white/10 text-[10px] font-bold z-10 shadow-sm">
                              +{(conv.groupMembers?.length || 0) - 3}
                            </div>
                          )}
                        </div>
                     ) : (
                       <div className="relative">
-                        <Avatar>
+                        <Avatar className="border border-black/5 dark:border-white/10 shadow-sm">
                           <AvatarImage src={conv.otherUser?.imageUrl} />
                           <AvatarFallback>{conv.otherUser?.name?.charAt(0)}</AvatarFallback>
                         </Avatar>
                         {isOnline(conv.otherUser?.lastSeen) && (
-                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-zinc-800 group-hover:dark:border-zinc-800 rounded-full z-10"></span>
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-50 dark:border-zinc-950 rounded-full z-10"></span>
                         )}
                       </div>
                     )}
@@ -295,29 +300,31 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
-                      <span className={`font-medium text-sm truncate ${conv.unreadCount > 0 ? "text-foreground font-bold" : ""}`}>
+                      <span className={`truncate text-sm ${conv.unreadCount > 0 ? "font-bold text-zinc-900 dark:text-zinc-100" : "font-semibold text-zinc-700 dark:text-zinc-300"}`}>
                         {conv.isGroup ? conv.groupName : conv.otherUser?.name}
                       </span>
                       <div className="flex items-center gap-2">
                         {conv.unreadCount > 0 && (
-                          <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[1.25rem]">
+                          /* Glowing Unread Badge */
+                          <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[1.25rem] shadow-[0_0_10px_rgba(59,130,246,0.4)]">
                             {conv.unreadCount}
                           </span>
                         )}
                         {conv.lastMessage && (
-                          <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-1">
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap ml-1 font-medium">
                             {formatMessageTime(conv.lastMessage._creationTime)}
                           </span>
                         )}
                       </div>
                     </div>
                     
-                    <p className={`text-xs truncate transition-colors ${conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground group-hover:text-zinc-900 dark:group-hover:text-zinc-100"}`}>
+                    <p className={`text-xs truncate transition-colors ${conv.unreadCount > 0 ? "text-blue-500 dark:text-blue-400 font-medium" : "text-zinc-500 dark:text-zinc-500"}`}>
                       {conv.lastMessage ? (
                          (conv.isGroup && conv.lastMessage.senderId !== user?.id ? "Someone: " : (conv.lastMessage.senderId !== conv.otherUser?.clerkId && !conv.isGroup ? "You: " : "")) + 
                          conv.lastMessage.content
                       ) : (
-                        <span className="italic">{conv.isGroup ? "Group created" : "Started a conversation"}</span>
+                        /* Removed italics, used standard font with lighter gray */
+                        <span className="font-medium">{conv.isGroup ? "Group created" : "Started a conversation"}</span>
                       )}
                     </p>
                   </div>
