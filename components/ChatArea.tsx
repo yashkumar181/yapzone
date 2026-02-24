@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
@@ -30,6 +30,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
   
   const messages = useQuery(api.messages.list, { conversationId });
   const users = useQuery(api.users.getUsers); // NEW: Fetch users to get names/avatars for group chat
+  // NEW: Group Drawer State & Queries
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
+  const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
   const toggleReaction = useMutation(api.messages.react);
@@ -188,6 +192,17 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
     }
   };
 
+  const handleLeaveGroup = async () => {
+    if (!confirm("Are you sure you want to leave this group?")) return;
+    try {
+      await leaveGroupMutation({ conversationId });
+      toast.success("You left the group");
+      onClose(); // Close the chat and go back to the home screen
+    } catch (error) {
+      toast.error("Failed to leave group");
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full relative" onClick={handleGlobalTap}>
       
@@ -216,16 +231,81 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
         </div>
       )}
 
-      <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center gap-2 shadow-sm z-10">
+      {/* UPDATED: Clickable Header */}
+      <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center gap-2 shadow-sm z-10 shrink-0">
         <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="flex flex-col">
+        <div 
+          className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
+          onClick={() => isGroup && setShowGroupInfo(true)}
+        >
           <h3 className="font-semibold text-lg">{otherUserName}</h3>
-          {/* Show a subtle badge if it's a group */}
-          {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Group Chat</span>}
+          {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Tap here for group info</span>}
         </div>
       </div>
+
+      {/* NEW: The Sliding Right-Side Group Info Drawer */}
+      {showGroupInfo && isGroup && groupDetails && (
+        <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+          
+          <div className="p-4 border-b flex items-center gap-3 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
+            <Button variant="ghost" size="icon" onClick={() => setShowGroupInfo(false)} className="-ml-2 shrink-0">
+              <X className="h-5 w-5" />
+            </Button>
+            <h2 className="font-bold text-lg truncate">Group Info</h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="bg-zinc-100 dark:bg-zinc-900 h-20 w-20 rounded-full mx-auto flex items-center justify-center border shadow-sm">
+                <Users className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <h3 className="font-bold text-xl">{groupDetails.groupName}</h3>
+              <p className="text-sm text-muted-foreground">{groupDetails.groupMembers?.length} Members</p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
+              <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
+                {groupDetails.groupMembers?.map((memberId) => {
+                  const memberUser = users?.find(u => u.clerkId === memberId);
+                  const isAdmin = groupDetails.groupAdmin === memberId;
+                  const isMe = user?.id === memberId;
+
+                  if (!memberUser) return null;
+
+                  return (
+                    <div key={memberId} className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={memberUser.imageUrl} />
+                        <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {isMe ? "You" : memberUser.name}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
+                          <Crown className="h-3 w-3" /> Admin
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
+             <Button variant="destructive" className="w-full font-bold" onClick={handleLeaveGroup}>
+               <LogOut className="h-4 w-4 mr-2" />
+               Leave Group
+             </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4 bg-zinc-50 dark:bg-zinc-900" onScroll={handleScroll}>
         <div className="flex flex-col gap-4 pb-4">

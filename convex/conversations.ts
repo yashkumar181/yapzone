@@ -206,3 +206,34 @@ export const createGroup = mutation({
     });
   },
 });
+
+// NEW: Fetch details for a specific group
+export const getGroupDetails = query({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv || !conv.isGroup) return null;
+    return conv;
+  },
+});
+
+// NEW: Leave a group chat
+export const leaveGroup = mutation({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const myId = identity.subject;
+    const conv = await ctx.db.get(args.conversationId);
+    
+    if (!conv || !conv.isGroup) throw new Error("Not a group");
+
+    // Remove my ID from the members array
+    const updatedMembers = (conv.groupMembers || []).filter((id) => id !== myId);
+
+    await ctx.db.patch(args.conversationId, {
+      groupMembers: updatedMembers,
+    });
+  },
+});
