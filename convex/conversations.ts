@@ -61,15 +61,20 @@ export const list = query({
       .withIndex("by_participantTwo", (q) => q.eq("participantTwo", myId))
       .collect();
 
-    // 2. Fetch Group chats
+   // 2. Fetch Group chats
     const allGroups = await ctx.db
       .query("conversations")
       .filter((q) => q.eq(q.field("isGroup"), true))
       .collect();
     
-    const myGroups = allGroups.filter(group => 
-      group.groupMembers?.includes(myId)
-    );
+    // UPDATED: Include groups I am currently in OR past groups, UNLESS I deleted it.
+    const myGroups = allGroups.filter(group => {
+      const isInGroup = group.groupMembers?.includes(myId);
+      const isPastMember = group.pastMembers?.includes(myId);
+      const isDeletedForMe = group.deletedBy?.includes(myId);
+
+      return (isInGroup || isPastMember) && !isDeletedForMe;
+    });
 
     // Combine and remove any accidental duplicates
     const allConversations = [...conv1, ...conv2, ...myGroups].filter(
@@ -218,8 +223,12 @@ export const getGroupDetails = query({
 });
 
 // NEW: Leave a group chat
+// UPDATED: Leave a group chat with options
 export const leaveGroup = mutation({
-  args: { conversationId: v.id("conversations") },
+  args: { 
+    conversationId: v.id("conversations"),
+    deleteHistory: v.boolean() // NEW: Did they choose to delete?
+  },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
@@ -229,11 +238,20 @@ export const leaveGroup = mutation({
     
     if (!conv || !conv.isGroup) throw new Error("Not a group");
 
-    // Remove my ID from the members array
+    // Remove my ID from the active members array
     const updatedMembers = (conv.groupMembers || []).filter((id) => id !== myId);
 
-    await ctx.db.patch(args.conversationId, {
+    const patchData: any = {
       groupMembers: updatedMembers,
-    });
+    };
+
+    // If they delete, add to deletedBy. If they just leave, add to pastMembers.
+    if (args.deleteHistory) {
+      patchData.deletedBy = [...(conv.deletedBy || []), myId];
+    } else {
+      patchData.pastMembers = [...(conv.pastMembers || []), myId];
+    }
+
+    await ctx.db.patch(args.conversationId, patchData);
   },
 });

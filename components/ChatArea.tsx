@@ -11,29 +11,26 @@ import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
 import { toast } from "sonner"; 
 import { Skeleton } from "@/components/ui/skeleton"; 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // NEW: For group avatars
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
   otherUserName: string;
-  isGroup?: boolean; // FIXED: Now accepts the isGroup prop
+  isGroup?: boolean; 
   onClose: () => void;
+  onSwitchChat?: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void; // NEW
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 
-export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: ChatAreaProps) {
+export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSwitchChat }: ChatAreaProps) {
   const { user } = useUser();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
   
   const messages = useQuery(api.messages.list, { conversationId });
-  const users = useQuery(api.users.getUsers); // NEW: Fetch users to get names/avatars for group chat
-  // NEW: Group Drawer State & Queries
-  const [showGroupInfo, setShowGroupInfo] = useState(false);
-  const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
-  const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
+  const users = useQuery(api.users.getUsers); 
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
   const toggleReaction = useMutation(api.messages.react);
@@ -48,12 +45,20 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  
+  const [showLeaveModal, setShowLeaveModal] = useState(false); // NEW
   const [messageToDelete, setMessageToDelete] = useState<Id<"messages"> | null>(null);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Id<"messages"> | null>(null);
 
   const [mobileActiveMessage, setMobileActiveMessage] = useState<Id<"messages"> | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Group Features
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
+  const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
+  const getOrCreateConversation = useMutation(api.conversations.getOrCreate); // NEW
+  const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null); // NEW
+  const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
 
   const handleGlobalTap = () => {
     if (mobileActiveMessage) setMobileActiveMessage(null);
@@ -65,7 +70,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
     const atBottom = scrollHeight - scrollTop <= clientHeight + 50; 
     setIsAtBottom(atBottom);
     if (atBottom) setShowScrollButton(false);
-
     handleGlobalTap();
   };
 
@@ -192,25 +196,37 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
     }
   };
 
-  const handleLeaveGroup = async () => {
-    if (!confirm("Are you sure you want to leave this group?")) return;
+const confirmLeaveGroup = async (deleteHistory: boolean) => {
     try {
-      await leaveGroupMutation({ conversationId });
-      toast.success("You left the group");
-      onClose(); // Close the chat and go back to the home screen
+      await leaveGroupMutation({ conversationId, deleteHistory });
+      toast.success(deleteHistory ? "Group deleted" : "Left the group");
+      setShowLeaveModal(false);
+      onClose(); // Send them back to the welcome screen
     } catch (error) {
-      toast.error("Failed to leave group");
+      toast.error("Failed to process request");
+    }
+  };
+
+  // NEW: Transition to Private Chat
+  const handleStartPrivateChat = async () => {
+    if (!memberToChat || !onSwitchChat) return;
+    try {
+      const newConvId = await getOrCreateConversation({ otherUserId: memberToChat.id });
+      setShowGroupInfo(false);
+      setMemberToChat(null);
+      onSwitchChat(newConvId, memberToChat.name, false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not start chat");
     }
   };
 
   return (
     <div className="flex-1 flex flex-col h-full relative" onClick={handleGlobalTap}>
       
+      {/* Existing Message Delete Modal */}
       {messageToDelete && (
-        <div 
-          className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={(e) => e.stopPropagation()} 
-        >
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
             <div>
               <h3 className="font-bold text-lg">Delete message?</h3>
@@ -231,7 +247,50 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
         </div>
       )}
 
-      {/* UPDATED: Clickable Header */}
+      {/* NEW: Leave Group Options Modal */}
+      {showLeaveModal && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div>
+              <h3 className="font-bold text-lg">Leave this group?</h3>
+              <p className="text-sm text-muted-foreground mt-1">Choose how you want to leave.</p>
+            </div>
+            <div className="flex flex-col gap-2 mt-2">
+              <Button onClick={() => confirmLeaveGroup(false)} className="w-full justify-start font-medium bg-zinc-100 hover:bg-zinc-200 text-black dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-white">
+                Leave Group (Keep History)
+              </Button>
+              <Button variant="destructive" onClick={() => confirmLeaveGroup(true)} className="w-full justify-start font-medium">
+                Leave and Delete Group
+              </Button>
+              <Button variant="ghost" onClick={() => setShowLeaveModal(false)} className="w-full font-medium">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Start Private Chat Modal */}
+      {memberToChat && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div>
+              <h3 className="font-bold text-lg">Chat with {memberToChat.name}?</h3>
+              <p className="text-sm text-muted-foreground mt-1">This will open a direct message with them.</p>
+            </div>
+            <div className="flex flex-col gap-2 mt-2">
+              <Button onClick={handleStartPrivateChat} className="w-full font-medium">
+                <MessageCircle className="w-4 h-4 mr-2" /> Start Chat
+              </Button>
+              <Button variant="ghost" onClick={() => setMemberToChat(null)} className="w-full font-medium">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
       <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center gap-2 shadow-sm z-10 shrink-0">
         <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
           <ArrowLeft className="h-5 w-5" />
@@ -245,7 +304,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
         </div>
       </div>
 
-      {/* NEW: The Sliding Right-Side Group Info Drawer */}
+      {/* Group Info Drawer */}
       {showGroupInfo && isGroup && groupDetails && (
         <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
           
@@ -269,23 +328,41 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
               <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
                 {groupDetails.groupMembers?.map((memberId) => {
-                  const memberUser = users?.find(u => u.clerkId === memberId);
-                  const isAdmin = groupDetails.groupAdmin === memberId;
                   const isMe = user?.id === memberId;
+                  const isAdmin = groupDetails.groupAdmin === memberId;
+
+                  // UPDATED: If the 'users' database query excludes you, we use your Clerk profile directly!
+                  const memberUser = isMe && user ? {
+                    clerkId: user.id,
+                    name: user.fullName || user.firstName || "You",
+                    imageUrl: user.imageUrl
+                  } : users?.find(u => u.clerkId === memberId);
 
                   if (!memberUser) return null;
 
                   return (
-                    <div key={memberId} className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950">
+                    <div 
+                      key={memberId} 
+                      // NEW: Hover effects and click handler for starting private chats
+                      className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
+                      onClick={() => {
+                        if (!isMe) {
+                          setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
+                        }
+                      }}
+                    >
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={memberUser.imageUrl} />
                         <AvatarFallback>{memberUser.name?.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {isMe ? "You" : memberUser.name}
+                        <p className="font-medium text-sm truncate flex items-center gap-2">
+                          {memberUser.name} 
+                          {/* NEW: (You) tag explicitly highlighted */}
+                          {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
                         </p>
                       </div>
+                      {/* NEW: Prominent Admin Badge */}
                       {isAdmin && (
                         <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
                           <Crown className="h-3 w-3" /> Admin
@@ -299,7 +376,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
           </div>
 
           <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-             <Button variant="destructive" className="w-full font-bold" onClick={handleLeaveGroup}>
+             <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
                <LogOut className="h-4 w-4 mr-2" />
                Leave Group
              </Button>
@@ -307,6 +384,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
         </div>
       )}
 
+      {/* Main Chat Feed */}
       <div className="flex-1 overflow-y-auto p-4 bg-zinc-50 dark:bg-zinc-900" onScroll={handleScroll}>
         <div className="flex flex-col gap-4 pb-4">
           {messages === undefined ? (
@@ -334,11 +412,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
           ) : (
             messages.map((msg, index) => {
               const isMe = msg.senderId === user?.id;
-              
-              // NEW: Get sender details for group chat
               const sender = isGroup ? users?.find(u => u.clerkId === msg.senderId) : null;
-              
-              // NEW: Check if the previous message was from the same sender to group them visually
               const isFirstInGroup = index === 0 || messages[index - 1].senderId !== msg.senderId;
 
               const reactionCounts = (msg.reactions || []).reduce((acc, r) => {
@@ -359,7 +433,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
                   onTouchMove={handleTouchEndOrMove}
                 >
                   
-                  {/* NEW: Render Sender Name for incoming group messages */}
                   {isGroup && !isMe && isFirstInGroup && sender && (
                     <span className="text-[10px] font-medium text-muted-foreground ml-10 mb-0.5">
                       {sender.name}
@@ -368,16 +441,17 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
 
                   <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} relative`}>
                     
-                    {/* NEW: Tiny Avatar for Group Chats */}
                     {isGroup && !isMe && (
                       <div className="w-8 shrink-0 flex justify-center">
                          {isFirstInGroup ? (
-                            <Avatar className="h-8 w-8">
+                            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
+                              setMemberToChat({ id: sender?.clerkId || "", name: sender?.name || "User" });
+                            }}>
                               <AvatarImage src={sender?.imageUrl} />
                               <AvatarFallback className="text-[10px]">{sender?.name?.charAt(0)}</AvatarFallback>
                             </Avatar>
                          ) : (
-                           <div className="w-8" /> // Empty placeholder to align grouped messages
+                           <div className="w-8" /> 
                          )}
                       </div>
                     )}
@@ -488,7 +562,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
 
           {typingIndicators && typingIndicators.length > 0 && (
             <div className="flex items-center gap-2 mt-2">
-               {isGroup && <div className="w-8 shrink-0" />} {/* Spacer for typing indicator alignment in groups */}
+               {isGroup && <div className="w-8 shrink-0" />} 
                <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
@@ -519,17 +593,23 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: Ch
       )}
 
       <div className="p-4 border-t bg-white dark:bg-zinc-950">
-        <form onSubmit={handleSend} className="flex gap-2">
-          <Input
-            value={newMessage}
-            onChange={handleInputChange}
-            placeholder="Type a message..."
-            className="flex-1 bg-zinc-100 dark:bg-zinc-900 border-transparent focus-visible:ring-1"
-          />
-          <Button type="submit" size="icon" disabled={!newMessage.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
+        {isPastMember ? (
+          <div className="flex items-center justify-center p-2 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
+            You left this group. You cannot send new messages.
+          </div>
+        ) : (
+          <form onSubmit={handleSend} className="flex gap-2">
+            <Input
+              value={newMessage}
+              onChange={handleInputChange}
+              placeholder="Type a message..."
+              className="flex-1 bg-zinc-100 dark:bg-zinc-900 border-transparent focus-visible:ring-1"
+            />
+            <Button type="submit" size="icon" disabled={!newMessage.trim()}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        )}
       </div>
     </div>
   );

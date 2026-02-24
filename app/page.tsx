@@ -76,6 +76,7 @@ export default function Home() {
             otherUserName={activeChatName || "Unknown"} 
             isGroup={activeChatIsGroup} // NEW
             onClose={handleCloseChat} 
+            onSwitchChat={handleSelectChat}
           />
         )}
       </div>

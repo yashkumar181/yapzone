@@ -20,6 +20,8 @@ export default defineSchema({
     groupName: v.optional(v.string()),
     groupMembers: v.optional(v.array(v.string())),
     groupAdmin: v.optional(v.string()),
+    pastMembers: v.optional(v.array(v.string())), 
+    deletedBy: v.optional(v.array(v.string())),
   })
     .index("by_participantOne", ["participantOne"])
     .index("by_participantTwo", ["participantTwo"]),
