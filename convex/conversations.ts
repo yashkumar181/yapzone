@@ -84,6 +84,7 @@ export const list = query({
     const enrichedConversations = await Promise.all(
       allConversations.map(async (conv) => {
         // Handle Group Chat enrichment
+        // Handle Group Chat enrichment
         if (conv.isGroup) {
            const lastMessage = await ctx.db
             .query("messages")
@@ -101,14 +102,31 @@ export const list = query({
               })
             );
 
+            // NEW: Smart Unread Badge Calculation!
+            // 1. Find MY specific last read timestamp (default to group creation time if I haven't opened it yet)
+            const myReadRecord = (conv.memberLastRead || []).find(r => r.userId === myId);
+            const myLastRead = myReadRecord ? myReadRecord.lastRead : conv._creationTime;
+
+            // 2. Count all messages sent AFTER my timestamp (that I didn't send)
+            const unreadMessages = await ctx.db
+              .query("messages")
+              .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
+              .filter((q) => 
+                q.and(
+                  q.gt(q.field("_creationTime"), myLastRead),
+                  q.neq(q.field("senderId"), myId)
+                )
+              )
+              .collect();
+
             return {
               _id: conv._id,
               isGroup: true,
               groupName: conv.groupName,
               groupMembers: memberProfiles.filter(Boolean), 
-              otherUser: undefined, // Force shape consistency for TypeScript
+              otherUser: undefined, 
               lastMessage,
-              unreadCount: 0, 
+              unreadCount: unreadMessages.length, // UPDATED: Now dynamically counts!
               _creationTime: conv._creationTime,
             };
         }
@@ -163,6 +181,7 @@ export const list = query({
 });
 
 // NEW: Mark a conversation as read
+// UPDATED: Mark a conversation as read (Now supports groups!)
 export const markAsRead = mutation({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
@@ -174,9 +193,20 @@ export const markAsRead = mutation({
 
     const myId = identity.subject;
 
-    if (conv.isGroup) return; // Skip read logic for groups right now
+    // NEW: Handle Group Chat Read Receipts
+    if (conv.isGroup) {
+      const currentReceipts = conv.memberLastRead || [];
+      // Filter out our old timestamp (if it exists)
+      const otherReceipts = currentReceipts.filter(r => r.userId !== myId);
+      
+      // Add our new timestamp for right NOW
+      await ctx.db.patch(args.conversationId, {
+        memberLastRead: [...otherReceipts, { userId: myId, lastRead: Date.now() }]
+      });
+      return;
+    }
 
-    // Update ONLY my field
+    // Handle 1-on-1 Chat Read Receipts (Legacy)
     if (conv.participantOne === myId) {
       await ctx.db.patch(args.conversationId, { participantOneLastRead: Date.now() });
     } else if (conv.participantTwo === myId) {

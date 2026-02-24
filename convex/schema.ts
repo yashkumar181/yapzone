@@ -22,6 +22,14 @@ export default defineSchema({
     groupAdmin: v.optional(v.string()),
     pastMembers: v.optional(v.array(v.string())), 
     deletedBy: v.optional(v.array(v.string())),
+    memberLastRead: v.optional(
+      v.array(
+        v.object({
+          userId: v.string(),
+          lastRead: v.number(),
+        })
+      )
+    ),
   })
     .index("by_participantOne", ["participantOne"])
     .index("by_participantTwo", ["participantTwo"]),
