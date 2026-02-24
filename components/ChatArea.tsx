@@ -11,22 +11,25 @@ import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
 import { toast } from "sonner"; 
 import { Skeleton } from "@/components/ui/skeleton"; 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // NEW: For group avatars
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
   otherUserName: string;
+  isGroup?: boolean; // FIXED: Now accepts the isGroup prop
   onClose: () => void;
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 
-export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaProps) {
+export function ChatArea({ conversationId, otherUserName, isGroup, onClose }: ChatAreaProps) {
   const { user } = useUser();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
   
   const messages = useQuery(api.messages.list, { conversationId });
+  const users = useQuery(api.users.getUsers); // NEW: Fetch users to get names/avatars for group chat
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
   const toggleReaction = useMutation(api.messages.react);
@@ -70,7 +73,7 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
 
   useEffect(() => {
     if (messages) {
-      markAsRead({ conversationId }).catch(() => {});
+      if (!isGroup) markAsRead({ conversationId }).catch(() => {});
 
       const isNewMessageAdded = messages.length > prevMessageCountRef.current;
       prevMessageCountRef.current = messages.length;
@@ -87,7 +90,7 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, conversationId, markAsRead]); 
+  }, [messages, conversationId, markAsRead, isGroup]); 
 
   useEffect(() => {
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
@@ -118,11 +121,10 @@ export function ChatArea({ conversationId, otherUserName, onClose }: ChatAreaPro
     }
   };
 
-const handleSend = async (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    // NEW: Explicitly check for internet connection before sending
     if (!navigator.onLine) {
       toast.error("You are offline. Please check your connection.");
       return;
@@ -218,13 +220,16 @@ const handleSend = async (e: React.FormEvent) => {
         <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h3 className="font-semibold text-lg">Chatting with {otherUserName}</h3>
+        <div className="flex flex-col">
+          <h3 className="font-semibold text-lg">{otherUserName}</h3>
+          {/* Show a subtle badge if it's a group */}
+          {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Group Chat</span>}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 bg-zinc-50 dark:bg-zinc-900" onScroll={handleScroll}>
         <div className="flex flex-col gap-4 pb-4">
           {messages === undefined ? (
-            // UPDATED: Beautiful staggered skeleton layout for loading state
             <div className="flex flex-col gap-4 w-full pt-4 animate-pulse px-2">
               <div className="flex justify-start">
                 <Skeleton className="h-10 w-[60%] rounded-2xl rounded-bl-sm bg-zinc-200 dark:bg-zinc-800" />
@@ -247,9 +252,15 @@ const handleSend = async (e: React.FormEvent) => {
               </p>
             </div>
           ) : (
-            messages.map((msg) => {
+            messages.map((msg, index) => {
               const isMe = msg.senderId === user?.id;
               
+              // NEW: Get sender details for group chat
+              const sender = isGroup ? users?.find(u => u.clerkId === msg.senderId) : null;
+              
+              // NEW: Check if the previous message was from the same sender to group them visually
+              const isFirstInGroup = index === 0 || messages[index - 1].senderId !== msg.senderId;
+
               const reactionCounts = (msg.reactions || []).reduce((acc, r) => {
                 acc[r.emoji] = (acc[r.emoji] || 0) + 1;
                 return acc;
@@ -262,14 +273,35 @@ const handleSend = async (e: React.FormEvent) => {
               return (
                 <div 
                   key={msg._id} 
-                  className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} mb-2`}
+                  className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"}`}
                   onTouchStart={() => handleTouchStart(msg._id)}
                   onTouchEnd={handleTouchEndOrMove}
                   onTouchMove={handleTouchEndOrMove}
                 >
                   
-                  <div className={`flex items-center gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} relative`}>
+                  {/* NEW: Render Sender Name for incoming group messages */}
+                  {isGroup && !isMe && isFirstInGroup && sender && (
+                    <span className="text-[10px] font-medium text-muted-foreground ml-10 mb-0.5">
+                      {sender.name}
+                    </span>
+                  )}
+
+                  <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} relative`}>
                     
+                    {/* NEW: Tiny Avatar for Group Chats */}
+                    {isGroup && !isMe && (
+                      <div className="w-8 shrink-0 flex justify-center">
+                         {isFirstInGroup ? (
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={sender?.imageUrl} />
+                              <AvatarFallback className="text-[10px]">{sender?.name?.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                         ) : (
+                           <div className="w-8" /> // Empty placeholder to align grouped messages
+                         )}
+                      </div>
+                    )}
+
                     <div
                       className={`max-w-[75%] px-4 py-2 relative ${
                         msg.isDeleted
@@ -312,7 +344,7 @@ const handleSend = async (e: React.FormEvent) => {
                     </div>
 
                     {!msg.isDeleted && (
-                      <div className={`flex items-center gap-1 transition-opacity duration-200 ${
+                      <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${
                         mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 md:group-hover:opacity-100"
                       }`}>
                         
@@ -366,7 +398,7 @@ const handleSend = async (e: React.FormEvent) => {
                     )}
                   </div>
                   
-                  <span className={`text-[10px] text-muted-foreground px-1 ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
+                  <span className={`text-[10px] text-muted-foreground ${isGroup && !isMe ? "ml-10" : "px-1"} ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
                     {formatMessageTime(msg._creationTime)}
                   </span>
                 </div>
@@ -376,12 +408,15 @@ const handleSend = async (e: React.FormEvent) => {
 
           {typingIndicators && typingIndicators.length > 0 && (
             <div className="flex items-center gap-2 mt-2">
+               {isGroup && <div className="w-8 shrink-0" />} {/* Spacer for typing indicator alignment in groups */}
                <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                  <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
                </div>
-               <span className="text-xs text-muted-foreground animate-pulse">{otherUserName} is typing...</span>
+               <span className="text-xs text-muted-foreground animate-pulse">
+                 {typingIndicators.length === 1 ? `${otherUserName.split(',')[0]} is typing...` : "Several people are typing..."}
+               </span>
             </div>
           )}
           

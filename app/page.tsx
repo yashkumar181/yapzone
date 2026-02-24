@@ -12,12 +12,12 @@ import { MessageSquare } from "lucide-react";
 export default function Home() {
   const { user, isLoaded } = useUser();
   const syncUser = useMutation(api.users.syncUser);
-  const updatePresence = useMutation(api.users.updatePresence); // NEW: Get the mutation
+  const updatePresence = useMutation(api.users.updatePresence);
   
   const [activeChatId, setActiveChatId] = useState<Id<"conversations"> | null>(null);
   const [activeChatName, setActiveChatName] = useState<string | null>(null);
-const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // NEW
-  // Sync user profile when they log in
+  const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // NEW
+
   useEffect(() => {
     if (user) {
       syncUser({
@@ -29,23 +29,17 @@ const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // N
     }
   }, [user, syncUser]);
 
-  // NEW: The "Heartbeat" effect to track online status
   useEffect(() => {
     if (!user) return;
-
-    // Fire immediately when the page loads
     updatePresence();
-
-    // Then ping the database every 30 seconds
     const intervalId = setInterval(() => {
       updatePresence();
     }, 30000);
-
-    // Cleanup the interval if the user navigates away or closes the component
     return () => clearInterval(intervalId);
   }, [user, updatePresence]);
 
- const handleSelectChat = (conversationId: Id<"conversations">, name: string, isGroup: boolean = false) => {
+  // UPDATED: Now accepts isGroup
+  const handleSelectChat = (conversationId: Id<"conversations">, name: string, isGroup: boolean = false) => {
     setActiveChatId(conversationId);
     setActiveChatName(name);
     setActiveChatIsGroup(isGroup);
@@ -54,6 +48,7 @@ const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // N
   const handleCloseChat = () => {
     setActiveChatId(null);
     setActiveChatName(null);
+    setActiveChatIsGroup(false);
   };
 
   if (!isLoaded) return null;
@@ -79,6 +74,7 @@ const [activeChatIsGroup, setActiveChatIsGroup] = useState<boolean>(false); // N
           <ChatArea 
             conversationId={activeChatId} 
             otherUserName={activeChatName || "Unknown"} 
+            isGroup={activeChatIsGroup} // NEW
             onClose={handleCloseChat} 
           />
         )}
