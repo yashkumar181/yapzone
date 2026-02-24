@@ -706,7 +706,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
                     {!msg.isDeleted && (
                       <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${
-                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 md:group-hover:opacity-100"
+                        // FIXED: Removed md: so it always shows on hover!
+                        mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       }`}>
                         
                         <div className="relative">
@@ -743,13 +744,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           )}
                         </div>
 
-                        {/* NEW: Desktop Reply Button */}
+                        {/* FIXED: Removed hidden md:block so you can always click reply on desktop! */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) });
                           }}
-                          className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors hidden md:block"
+                          className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
                           title="Reply"
                         >
                           <Reply className="h-4 w-4" />
