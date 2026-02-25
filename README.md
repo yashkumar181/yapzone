@@ -81,10 +81,12 @@ Want to run YapZone locally? Follow these steps:
 ```bash
 git clone [https://github.com/yourusername/yapzone.git](https://github.com/yourusername/yapzone.git)
 cd yapzone
+```
 
 **2. Install dependencies**
 ```bash
 npm install
+```
 
 **3. Setup Environment Variables**
 Create a .env.local file in the root directory and add your Clerk and Convex keys:
@@ -94,5 +96,21 @@ CLERK_SECRET_KEY=your_clerk_secret_key
 
 CONVEX_DEPLOYMENT=your_convex_deployment
 NEXT_PUBLIC_CONVEX_URL=your_convex_url
+```
 
+**4. Start the Convex Backend**
+```bash
+npx convex dev
+```
 
+**5. Run the Next.js Development Server**
+```bash
+npm run dev
+```
+Open http://localhost:3000 to view the application.
+
+---
+
+<div align="center">
+<p>Built with ☕ and hardwork... By: Yash Kumar</p>
+</div>
