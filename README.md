@@ -10,12 +10,11 @@
 
 <br />
 
-> A high-performance, real-time messaging platform built for the **Tars Full Stack Engineer Internship Challenge**. YapZone goes beyond basic CRUD, implementing complex state management, dynamic UI rendering, robust backend security, and full-text search indexing.
+> A high-performance, real-time messaging platform designed for seamless and instant communication. YapZone goes beyond basic CRUD architecture, delivering a premium user experience by implementing complex state management, fluid UI rendering, robust backend security, and lightning-fast full-text search indexing.
 
 ### 🔗 Quick Links
-- **🔴 Live Application:** [Insert your Vercel URL here]
-- **🎥 Loom Video Walkthrough:** [Insert your Loom URL here]
-- **💻 GitHub Repository:** [Insert your Repo URL here]
+- **🔴 Live Application:** [https://yapzone.vercel.app/]
+- **💻 GitHub Repository:** [https://github.com/yashkumar181/yapzone]
 
 ---
 
@@ -38,7 +37,7 @@
 YapZone was built with an obsessive focus on edge cases, mobile UX, and database security. 
 
 ### 🛡️ Advanced Core Mechanics
-- **Full-Text Convex Search:** Implemented `.searchIndex()` on the backend. Users can instantly search chat histories, and the UI dynamically scrolls to and highlights the queried message.
+- **Full-Text Search:** Implemented `.searchIndex()` on the backend. Users can instantly search chat histories, and the UI dynamically scrolls to and highlights the queried message.
 - **Mutual Blocking Engine:** Secure backend logic utilizing `ConvexError`. If User A blocks User B, the UI completely removes the input field, and backend mutations immediately reject unauthorized API requests.
 - **Conversation Pinning:** Custom array sorting logic allows users to anchor priority 1-on-1s or Group Chats to the top of their feed.
 - **Granular Read Receipts:** Tracks exact `lastReadAt` timestamps per user, displaying intelligent "Seen" checkmarks only when appropriate.
@@ -57,7 +56,7 @@ YapZone was built with an obsessive focus on edge cases, mobile UX, and database
 
 ## 🛠️ Technical Architecture
 
-### Frontend (Next.js 15 & React)
+### Frontend (Next.js & React)
 - **App Router:** Fully leveraged for layout structuring and clean URL mapping.
 - **Tailwind CSS + Shadcn/UI:** Highly accessible, dark-mode native components with custom smooth animations (`animate-in`, `slide-in-from-bottom`).
 - **Responsive Flexbox Layouts:** Eliminated common chat-app bugs (like page scrolling) by strictly enforcing `100dvh`, `overflow-hidden`, and flex `shrink-0` bounds. Touch-event listeners (`onTouchStart`, `onTouchMove`) handle mobile interactions seamlessly.
