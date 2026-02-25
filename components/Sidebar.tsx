@@ -200,14 +200,16 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       {/* NEW: All Users Modal */}
       {showAllUsersModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
-          <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
+          {/* FIX: added shrink-0 to prevent squishing */}
+          <div className="shrink-0 p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
             <h2 className="font-bold text-lg">People on YapZone</h2>
             <Button variant="ghost" size="icon" onClick={() => setShowAllUsersModal(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>
           
-          <ScrollArea className="flex-1 p-2">
+          {/* FIX: added min-h-0 to lock scroll area height */}
+          <ScrollArea className="flex-1 min-h-0 p-2">
             {users?.filter(u => u.clerkId !== user?.id).map((u) => (
               <button
                 key={u._id}
@@ -236,14 +238,16 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       {/* Existing Group Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
-          <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
+          {/* FIX: added shrink-0 */}
+          <div className="shrink-0 p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
             <h2 className="font-bold text-lg">New Group</h2>
             <Button variant="ghost" size="icon" onClick={() => setShowGroupModal(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>
 
-          <div className="p-4 border-b space-y-4 bg-white dark:bg-zinc-950">
+          {/* FIX: added shrink-0 */}
+          <div className="shrink-0 p-4 border-b space-y-4 bg-white dark:bg-zinc-950">
             <Input
               placeholder="Group Subject"
               value={groupName}
@@ -276,7 +280,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
             )}
           </div>
 
-          <ScrollArea className="flex-1 p-2">
+          {/* FIX: added min-h-0 */}
+          <ScrollArea className="flex-1 min-h-0 p-2">
             <p className="text-xs font-semibold text-muted-foreground px-2 py-2 uppercase tracking-wider">Select Members</p>
             {users?.map((user) => (
               <button
@@ -300,7 +305,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
             ))}
           </ScrollArea>
 
-          <div className="p-4 border-t bg-white dark:bg-zinc-950">
+          {/* FIX: added shrink-0 */}
+          <div className="shrink-0 p-4 border-t bg-white dark:bg-zinc-950">
             <Button 
               className="w-full rounded-full font-bold" 
               size="lg"
@@ -313,7 +319,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* FIX: Added shrink-0 to prevent the header from squishing */}
       <div className="shrink-0 pt-4 flex flex-col gap-4 border-b dark:border-white/[0.08]">
         <div className="flex items-center justify-between px-4">
           <h2 className="text-xl font-semibold tracking-tight">Chats</h2>
@@ -353,7 +358,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       </div>
 
-      {/* FIX: Added min-h-0 to the ScrollArea flex child */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="py-2 space-y-1">
           {searchQuery ? (
