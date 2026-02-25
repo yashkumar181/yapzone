@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2 } from "lucide-react";
+import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2, PlusCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,24 +31,25 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const createGroup = useMutation(api.conversations.createGroup);
   const markAsRead = useMutation(api.conversations.markAsRead);
-  
-  // NEW: The Delete Mutation!
   const deleteChatMutation = useMutation(api.conversations.deleteConversation);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState<string | null>(null);
   const [chatFilter, setChatFilter] = useState<"all" | "dms" | "groups">("all");
 
+  // Group Modal State
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
-  // NEW: Context Menu State for Right-Click & Long-Press
+  // NEW: All Users Modal State
+  const [showAllUsersModal, setShowAllUsersModal] = useState(false);
+  const [userToStartChat, setUserToStartChat] = useState<{id: string, name: string} | null>(null);
+
   const [contextMenu, setContextMenu] = useState<{ id: Id<"conversations">, x: number, y: number } | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Close context menu if you click anywhere else
   useEffect(() => {
     const handleClickOutside = () => setContextMenu(null);
     window.addEventListener("click", handleClickOutside);
@@ -72,6 +73,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       onSelectChat(conversationId, otherUserName, false);
       await markAsRead({ conversationId });
       setSearchQuery(""); 
+      setShowAllUsersModal(false); // Close the new modal if open
     } catch (error) {
       console.error("Failed to create chat:", error);
     } finally {
@@ -134,7 +136,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     return "";
   };
 
-  // NEW: Touch Event Handlers for Long Press Mobile Deletion
   const handleTouchStart = (e: React.TouchEvent, convId: Id<"conversations">) => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     const touch = e.touches[0];
@@ -143,7 +144,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50);
       }
-    }, 500); // 500ms long press
+    }, 500); 
   };
 
   const handleTouchEndOrMove = () => {
@@ -153,7 +154,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   return (
     <div className="w-full h-full border-r bg-zinc-50 dark:bg-zinc-950 flex flex-col relative" onContextMenu={(e) => e.preventDefault()}>
       
-      {/* NEW: Global Context Menu UI */}
       {contextMenu && (
         <div 
           className="fixed z-[100] bg-white dark:bg-zinc-900 border dark:border-zinc-800 shadow-xl rounded-xl py-1 w-48 animate-in fade-in zoom-in-95 duration-150"
@@ -170,7 +170,70 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* Group Modal */}
+      {/* NEW: Start Direct Chat Confirmation Prompt */}
+      {userToStartChat && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setUserToStartChat(null); }}>
+          <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="font-bold text-lg">Start Chat?</h3>
+              <p className="text-sm text-muted-foreground mt-1">Do you want to text {userToStartChat.name}?</p>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setUserToStartChat(null)}>
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1" 
+                disabled={isCreating === userToStartChat.id}
+                onClick={() => {
+                  handleStartChat(userToStartChat.id, userToStartChat.name);
+                  setUserToStartChat(null);
+                }}
+              >
+                {isCreating === userToStartChat.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Start Chat"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: All Users Modal */}
+      {showAllUsersModal && (
+        <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
+          <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
+            <h2 className="font-bold text-lg">People on YapZone</h2>
+            <Button variant="ghost" size="icon" onClick={() => setShowAllUsersModal(false)}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          
+          <ScrollArea className="flex-1 p-2">
+            {users?.filter(u => u.clerkId !== user?.id).map((u) => (
+              <button
+                key={u._id}
+                onClick={() => setUserToStartChat({ id: u.clerkId, name: u.name || "User" })}
+                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
+              >
+                <div className="relative">
+                  <Avatar className="border shadow-sm">
+                    <AvatarImage src={u.imageUrl} />
+                    <AvatarFallback>{u.name?.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  {isOnline(u.lastSeen) && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-zinc-950 rounded-full z-10"></span>
+                  )}
+                </div>
+                <span className="font-semibold text-sm">{u.name}</span>
+              </button>
+            ))}
+            {users?.filter(u => u.clerkId !== user?.id).length === 0 && (
+               <div className="p-6 text-center text-sm text-muted-foreground">No other users found.</div>
+            )}
+          </ScrollArea>
+        </div>
+      )}
+
+      {/* Existing Group Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
           <div className="p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
@@ -255,7 +318,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           <h2 className="text-xl font-semibold tracking-tight">Chats</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={() => setShowGroupModal(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            {/* UPDATED: This icon now opens the All Users modal! */}
+            <Button variant="ghost" size="icon" onClick={() => setShowAllUsersModal(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
               <Users className="h-5 w-5" />
             </Button>
             <UserButton afterSignOutUrl="/sign-in" />
@@ -272,10 +336,21 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           />
         </div>
 
-        <div className="flex items-center gap-2 px-4 pb-3 mt-[-4px]">
-          <button onClick={() => setChatFilter("all")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'all' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>All</button>
-          <button onClick={() => setChatFilter("dms")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'dms' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>Direct</button>
-          <button onClick={() => setChatFilter("groups")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'groups' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>Groups</button>
+        {/* UPDATED: Filter row now has the New Group button on the right! */}
+        <div className="flex items-center justify-between px-4 pb-3 mt-[-4px]">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setChatFilter("all")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'all' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>All</button>
+            <button onClick={() => setChatFilter("dms")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'dms' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>Direct</button>
+            <button onClick={() => setChatFilter("groups")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'groups' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>Groups</button>
+          </div>
+          
+          <button 
+            onClick={() => setShowGroupModal(true)} 
+            className="text-xs flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+            Group
+          </button>
         </div>
       </div>
 
@@ -337,7 +412,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                 <div 
                   key={conv._id}
                   className="relative"
-                  // Desktop Right Click Handler
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setContextMenu({ id: conv._id, x: e.clientX, y: e.clientY });
@@ -346,7 +420,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                   <button
                     className="w-[calc(100%-16px)] mx-2 my-1 flex items-center gap-3 p-3 rounded-xl cursor-pointer bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-white/5 shadow-sm hover:shadow-md hover:bg-zinc-50 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left group relative"
                     onClick={() => handleSelectConversation(conv)}
-                    // Mobile Long Press Handlers
                     onTouchStart={(e) => handleTouchStart(e, conv._id)}
                     onTouchMove={handleTouchEndOrMove}
                     onTouchEnd={handleTouchEndOrMove}
