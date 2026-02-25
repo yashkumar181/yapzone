@@ -375,3 +375,13 @@ export const deleteConversation = mutation({
     });
   },
 });
+
+// ==========================================
+// NEW: Get Conversation Details (For Read Receipts)
+// ==========================================
+export const getConversation = query({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.conversationId);
+  },
+});

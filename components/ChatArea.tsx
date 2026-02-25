@@ -5,18 +5,19 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, UserMinus, Reply, UserPlus } from "lucide-react";
+// FIX: Imported CheckCheck for the double ticks!
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, CheckCheck, UserMinus, Reply, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
-import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner"; 
+import { Skeleton } from "@/components/ui/skeleton"; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface ChatAreaProps {
   conversationId: Id<"conversations">;
   otherUserName: string;
-  isGroup?: boolean;
+  isGroup?: boolean; 
   onClose: () => void;
   onSwitchChat?: (conversationId: Id<"conversations">, name: string, isGroup?: boolean) => void;
 }
@@ -28,18 +29,21 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
-
+  
   const messages = useQuery(api.messages.list, { conversationId });
-  const users = useQuery(api.users.getUsers);
+  const users = useQuery(api.users.getUsers); 
+  
+  // NEW: Fetching the real-time conversation data for Read Receipts!
+  const conversation = useQuery(api.conversations.getConversation, { conversationId });
+  
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
   const toggleReaction = useMutation(api.messages.react);
-
-  const typingIndicators = useQuery(api.typing.getActive, { conversationId });
   const startTyping = useMutation(api.typing.start);
   const stopTyping = useMutation(api.typing.stop);
   const markAsRead = useMutation(api.conversations.markAsRead);
-
+  const typingIndicators = useQuery(api.typing.getActive, { conversationId });
+  
   const [newMessage, setNewMessage] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const lastTypingTimeRef = useRef<number>(0);
@@ -54,18 +58,19 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showGroupInfo, setShowGroupInfo] = useState(false);
-  const groupDetails = useQuery(api.conversations.getGroupDetails, isGroup ? { conversationId } : "skip");
   const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const kickMemberMutation = useMutation(api.conversations.kickMember);
   const updateGroupDetailsMutation = useMutation(api.conversations.updateGroupDetails);
   const addMembersMutation = useMutation(api.conversations.addMembers);
-  const renameGroupMutation = useMutation(api.conversations.renameGroup);
+  const renameGroupMutation = useMutation(api.conversations.renameGroup); 
 
-  const [memberToChat, setMemberToChat] = useState<{ id: string, name: string } | null>(null);
-  const [memberToKick, setMemberToKick] = useState<{ id: string, name: string } | null>(null);
-  const isPastMember = groupDetails?.pastMembers?.includes(user?.id || "");
-  const isAdmin = groupDetails?.groupAdmin === user?.id;
+  const [memberToChat, setMemberToChat] = useState<{id: string, name: string} | null>(null);
+  const [memberToKick, setMemberToKick] = useState<{id: string, name: string} | null>(null);
+  
+  // Adjusted to use the unified conversation state
+  const isPastMember = conversation?.pastMembers?.includes(user?.id || "");
+  const isAdmin = conversation?.groupAdmin === user?.id; 
 
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
@@ -86,7 +91,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    const atBottom = scrollHeight - scrollTop <= clientHeight + 50;
+    const atBottom = scrollHeight - scrollTop <= clientHeight + 50; 
     setIsAtBottom(atBottom);
     if (atBottom) setShowScrollButton(false);
     handleGlobalTap();
@@ -100,7 +105,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   useEffect(() => {
     if (messages) {
-      markAsRead({ conversationId }).catch(() => { });
+      markAsRead({ conversationId }).catch(() => {});
       const isNewMessageAdded = messages.length > prevMessageCountRef.current;
       prevMessageCountRef.current = messages.length;
 
@@ -121,11 +126,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (isAtBottom && typingIndicators && typingIndicators.length > 0) {
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [typingIndicators]);
+  }, [typingIndicators]); 
 
   useEffect(() => {
     return () => {
-      stopTyping({ conversationId }).catch(() => { });
+      stopTyping({ conversationId }).catch(() => {});
     };
   }, [conversationId, stopTyping]);
 
@@ -164,7 +169,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (!navigator.onLine) return toast.error("You are offline.");
 
     const content = newMessage.trim();
-    setNewMessage("");
+    setNewMessage(""); 
     stopTyping({ conversationId });
 
     setIsAtBottom(true);
@@ -172,10 +177,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
     try {
       await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
-      setReplyingTo(null);
+      setReplyingTo(null); 
     } catch (error) {
       toast.error("Failed to send message.");
-      setNewMessage(content);
+      setNewMessage(content); 
     }
   };
 
@@ -183,12 +188,12 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (!messageToDelete) return;
     try {
       await deleteMessage({ messageId: messageToDelete, type });
-      toast.success("Message deleted");
+      toast.success("Message deleted"); 
     } catch (error) {
-      toast.error("Could not delete message.");
+      toast.error("Could not delete message."); 
     } finally {
-      setMessageToDelete(null);
-      setMobileActiveMessage(null);
+      setMessageToDelete(null); 
+      setMobileActiveMessage(null); 
     }
   };
 
@@ -196,17 +201,17 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     try {
       await toggleReaction({ messageId: msgId, emoji });
     } catch (error) {
-      toast.error("Could not add reaction.");
+      toast.error("Could not add reaction."); 
     }
   };
-
+  
   const handleTouchStart = (e: React.TouchEvent, msgId: Id<"messages">) => {
     if (mobileActiveMessage !== msgId) {
       setMobileActiveMessage(null);
       setSelectedMessageForReaction(null);
     }
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => setMobileActiveMessage(msgId), 400);
+    longPressTimerRef.current = setTimeout(() => setMobileActiveMessage(msgId), 400); 
     swipeStartRef.current = { id: msgId, x: e.touches[0].clientX };
   };
 
@@ -243,7 +248,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       await leaveGroupMutation({ conversationId, deleteHistory });
       toast.success(deleteHistory ? "Group deleted" : "Left the group");
       setShowLeaveModal(false);
-      onClose();
+      onClose(); 
     } catch (error) {
       toast.error("Failed to process request");
     }
@@ -263,10 +268,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const handleMentionSelect = (name: string) => {
     if (mentionQuery === null) return;
-    const formattedName = name.replace(/\s+/g, "");
+    const formattedName = name.replace(/\s+/g, ""); 
     const lastAtIndex = newMessage.lastIndexOf("@" + mentionQuery);
     if (lastAtIndex !== -1) {
-      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + 1 + mentionQuery.length);
+      const newValue = newMessage.substring(0, lastAtIndex) + "@" + formattedName + " " + newMessage.substring(lastAtIndex + 1 + mentionQuery.length); 
       setNewMessage(newValue);
     }
     setMentionQuery(null);
@@ -295,8 +300,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         description: editDescValue.trim() || undefined,
         imageUrl: editImgValue.trim() || undefined,
       });
-      if (editNameValue.trim() !== groupDetails?.groupName) {
-        await renameGroupMutation({ conversationId, newName: editNameValue });
+      if (editNameValue.trim() !== conversation?.groupName) {
+         await renameGroupMutation({ conversationId, newName: editNameValue });
       }
       setIsEditingGroup(false);
       toast.success("Group details updated!");
@@ -305,7 +310,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     }
   };
 
-  // NEW: The Local File Upload logic
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -315,7 +319,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_SIZE = 256;
+        const MAX_SIZE = 256; 
         let width = img.width;
         let height = img.height;
 
@@ -334,8 +338,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         ctx?.drawImage(img, 0, 0, width, height);
-
-        // Convert to highly-compressed jpeg to save safely in Convex string field
+        
         const base64String = canvas.toDataURL("image/jpeg", 0.8);
         setEditImgValue(base64String);
       };
@@ -345,7 +348,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   };
 
   const handleKickMemberClick = (e: React.MouseEvent, memberId: string, memberName: string) => {
-    e.stopPropagation();
+    e.stopPropagation(); 
     setMemberToKick({ id: memberId, name: memberName });
   };
 
@@ -357,7 +360,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     } catch (error) {
       toast.error("Failed to remove member");
     } finally {
-      setMemberToKick(null);
+      setMemberToKick(null); 
     }
   };
 
@@ -377,7 +380,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     const u = users?.find(u => u.clerkId === t.userId);
     return u ? u.name?.split(' ')[0] : "Someone";
   });
-
+  
   let typingText = "";
   if (typingNames.length === 1) typingText = `${typingNames[0]} is typing...`;
   else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
@@ -385,7 +388,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   return (
     <div className="flex-1 flex flex-col h-full relative overflow-hidden" onClick={handleGlobalTap}>
-      {/* Existing Message Delete Modal */}
+      
       {messageToDelete && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -408,7 +411,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </div>
       )}
 
-      {/* Leave Group Options Modal */}
       {showLeaveModal && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -431,7 +433,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </div>
       )}
 
-      {/* Custom Kick Member Modal */}
       {memberToKick && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -451,7 +452,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </div>
       )}
 
-      {/* Start Private Chat Modal */}
       {memberToChat && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200">
@@ -471,35 +471,33 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </div>
       )}
 
-      {/* Header */}
       <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center gap-2 shadow-sm z-10 shrink-0">
         <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div
+        <div 
           className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
           onClick={() => isGroup && setShowGroupInfo(true)}
         >
           <div className="flex items-center gap-2">
-            {isGroup && groupDetails?.groupImageUrl && (
-              <img src={groupDetails.groupImageUrl} alt="Group" className="w-6 h-6 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" />
+            {isGroup && conversation?.groupImageUrl && (
+               <img src={conversation.groupImageUrl} alt="Group" className="w-6 h-6 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" />
             )}
-            <h3 className="font-semibold text-lg">{isGroup ? groupDetails?.groupName || otherUserName : otherUserName}</h3>
+            <h3 className="font-semibold text-lg">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
           </div>
           {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Tap here for group info</span>}
         </div>
       </div>
 
-      {/* Group Info Drawer */}
-      {showGroupInfo && isGroup && groupDetails && (
+      {showGroupInfo && isGroup && conversation && (
         <>
-          <div
-            className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all"
-            onClick={() => { setShowGroupInfo(false); setIsEditingGroup(false); setIsAddingMember(false); }}
+          <div 
+            className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all" 
+            onClick={() => { setShowGroupInfo(false); setIsEditingGroup(false); setIsAddingMember(false); }} 
           />
-
+          
           <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-
+            
             <div className="p-4 border-b flex items-center gap-3 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
               <Button variant="ghost" size="icon" onClick={() => setShowGroupInfo(false)} className="-ml-2 shrink-0">
                 <X className="h-5 w-5" />
@@ -508,23 +506,23 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-
+              
               {isAddingMember ? (
                 <div className="space-y-4 animate-in fade-in">
-                  <Input
-                    placeholder="Search users to add..."
-                    value={addMemberQuery}
+                  <Input 
+                    placeholder="Search users to add..." 
+                    value={addMemberQuery || ""}
                     onChange={(e) => setAddMemberQuery(e.target.value)}
                     className="bg-zinc-100 dark:bg-zinc-900"
                   />
                   <div className="space-y-2">
-                    {users?.filter(u =>
-                      !groupDetails.groupMembers?.includes(u.clerkId) &&
+                    {users?.filter(u => 
+                      !conversation.groupMembers?.includes(u.clerkId) && 
                       u.name?.toLowerCase().includes(addMemberQuery.toLowerCase())
                     ).map(u => (
                       <div key={u._id} className="flex items-center justify-between p-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8"><AvatarImage src={u.imageUrl} /><AvatarFallback>{u.name?.charAt(0)}</AvatarFallback></Avatar>
+                          <Avatar className="h-8 w-8"><AvatarImage src={u.imageUrl}/><AvatarFallback>{u.name?.charAt(0)}</AvatarFallback></Avatar>
                           <span className="text-sm font-medium">{u.name}</span>
                         </div>
                         <Button size="sm" onClick={() => handleAddNewMember(u.clerkId)}>Add</Button>
@@ -536,26 +534,24 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               ) : (
                 <>
                   <div className="text-center space-y-3">
-
-                    {/* The Custom Upload Avatar and Pencil Edit Button! */}
+                    
                     <div className="relative inline-block mx-auto">
-                      {groupDetails.groupImageUrl ? (
-                        <img src={groupDetails.groupImageUrl} alt="Group Avatar" className="h-24 w-24 rounded-2xl object-cover border shadow-sm" />
+                      {conversation.groupImageUrl ? (
+                        <img src={conversation.groupImageUrl} alt="Group Avatar" className="h-24 w-24 rounded-2xl object-cover border shadow-sm" />
                       ) : (
                         <div className="bg-zinc-100 dark:bg-zinc-900 h-24 w-24 rounded-2xl flex items-center justify-center border shadow-sm">
                           <Users className="h-10 w-10 text-muted-foreground" />
                         </div>
                       )}
-
-                      {/* THIS is the new pencil button: Always visible, stuck to bottom right */}
+                      
                       {isAdmin && !isEditingGroup && (
-                        <button
-                          onClick={() => {
-                            setEditNameValue(groupDetails.groupName || "");
-                            setEditDescValue(groupDetails.groupDescription || "");
-                            setEditImgValue(groupDetails.groupImageUrl || "");
-                            setIsEditingGroup(true);
-                          }}
+                        <button 
+                          onClick={() => { 
+                            setEditNameValue(conversation.groupName || ""); 
+                            setEditDescValue(conversation.groupDescription || "");
+                            setEditImgValue(conversation.groupImageUrl || "");
+                            setIsEditingGroup(true); 
+                          }} 
                           className="absolute -bottom-2 -right-2 bg-zinc-900 text-white dark:bg-white dark:text-black p-2 rounded-full shadow-md hover:scale-110 transition-transform z-10"
                           title="Edit Group Details"
                         >
@@ -563,25 +559,24 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         </button>
                       )}
                     </div>
-
+                    
                     {isEditingGroup ? (
                       <div className="flex flex-col gap-3 mx-auto animate-in fade-in p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 text-left mt-2">
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Group Name</label>
-                          <Input value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" autoFocus />
+                          <Input value={editNameValue || ""} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" autoFocus/>
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Description</label>
-                          <Input placeholder="What's this group about?" value={editDescValue} onChange={(e) => setEditDescValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1" />
+                          <Input placeholder="What's this group about?" value={editDescValue || ""} onChange={(e) => setEditDescValue(e.target.value)} className="h-8 bg-white dark:bg-zinc-950 mt-1"/>
                         </div>
-
-                        {/* Native Input File Upload */}
+                        
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Update Image</label>
-                          <Input
-                            type="file"
+                          <Input 
+                            type="file" 
                             accept="image/*"
-                            onChange={handleImageUpload}
+                            onChange={handleImageUpload} 
                             className="h-8 bg-white dark:bg-zinc-950 mt-1 text-xs cursor-pointer file:mr-2 file:py-0 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-900 hover:file:bg-zinc-200"
                           />
                         </div>
@@ -593,11 +588,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-1">
-                        <h3 className="font-bold text-xl px-6">{groupDetails.groupName}</h3>
-                        {groupDetails.groupDescription && (
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 px-4">{groupDetails.groupDescription}</p>
+                        <h3 className="font-bold text-xl px-6">{conversation.groupName}</h3>
+                        {conversation.groupDescription && (
+                          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 px-4">{conversation.groupDescription}</p>
                         )}
-                        <p className="text-xs text-muted-foreground mt-2">{groupDetails.groupMembers?.length} Members</p>
+                        <p className="text-xs text-muted-foreground mt-2">{conversation.groupMembers?.length} Members</p>
                       </div>
                     )}
                   </div>
@@ -605,9 +600,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   <div className="space-y-3">
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
                     <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
-                      {groupDetails.groupMembers?.map((memberId) => {
+                      {conversation.groupMembers?.map((memberId) => {
                         const isMe = user?.id === memberId;
-                        const isThisUserAdmin = groupDetails.groupAdmin === memberId;
+                        const isThisUserAdmin = conversation.groupAdmin === memberId;
 
                         const memberUser = isMe && user ? {
                           clerkId: user.id,
@@ -618,8 +613,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         if (!memberUser) return null;
 
                         return (
-                          <div
-                            key={memberId}
+                          <div 
+                            key={memberId} 
                             className={`flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 group/member ${!isMe ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors" : ""}`}
                             onClick={() => {
                               if (!isMe) setMemberToChat({ id: memberUser.clerkId, name: memberUser.name || "User" });
@@ -631,11 +626,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-sm truncate flex items-center gap-2">
-                                {memberUser.name}
+                                {memberUser.name} 
                                 {isMe && <span className="text-xs text-muted-foreground font-normal">(You)</span>}
                               </p>
                             </div>
-
+                            
                             {isThisUserAdmin && (
                               <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-500 px-2 py-1 rounded-md gap-1">
                                 <Crown className="h-3 w-3" /> Admin
@@ -643,7 +638,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                             )}
 
                             {isAdmin && !isMe && (
-                              <button
+                              <button 
                                 onClick={(e) => handleKickMemberClick(e, memberId, memberUser.name || "User")}
                                 className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-opacity opacity-100 md:opacity-0 md:group-hover/member:opacity-100"
                                 title={`Kick ${memberUser.name}`}
@@ -655,7 +650,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         );
                       })}
                     </div>
-
+                    
                     {isAdmin && (
                       <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingMember(true)}>
                         <UserPlus className="h-4 w-4 mr-2" /> Add Members
@@ -667,29 +662,24 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-              <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Leave Group
-              </Button>
+               <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
+                 <LogOut className="h-4 w-4 mr-2" />
+                 Leave Group
+               </Button>
             </div>
           </div>
         </>
       )}
 
-      {/* Main Chat Feed */}
       <div className="flex-1 overflow-y-auto p-4 bg-zinc-50 dark:bg-zinc-900" onScroll={handleScroll}>
         <div className="flex flex-col gap-4 pb-4">
           {messages === undefined ? (
             <div className="flex flex-col gap-4 w-full pt-4 animate-pulse px-2">
-              <div className="flex justify-start">
-                <Skeleton className="h-10 w-[60%] rounded-2xl rounded-bl-sm bg-zinc-200 dark:bg-zinc-800" />
-              </div>
-              <div className="flex justify-end">
-                <Skeleton className="h-10 w-[40%] rounded-2xl rounded-br-sm bg-zinc-200 dark:bg-zinc-800" />
-              </div>
+              <div className="flex justify-start"><Skeleton className="h-10 w-[60%] rounded-2xl rounded-bl-sm bg-zinc-200 dark:bg-zinc-800" /></div>
+              <div className="flex justify-end"><Skeleton className="h-10 w-[40%] rounded-2xl rounded-br-sm bg-zinc-200 dark:bg-zinc-800" /></div>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
+             <div className="flex-1 flex flex-col items-center justify-center mt-32 gap-3 opacity-70">
               <MessageCircle className="h-12 w-12 text-muted-foreground" />
               <p className="text-sm font-medium text-muted-foreground">No messages yet. Be the first to say hi!</p>
             </div>
@@ -704,20 +694,36 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 return acc;
               }, {} as Record<string, number>);
 
-              const myReactions = new Set(
-                (msg.reactions || []).filter(r => r.userId === user?.id).map(r => r.emoji)
-              );
-
+              const myReactions = new Set((msg.reactions || []).filter(r => r.userId === user?.id).map(r => r.emoji));
               const repliedMessage = msg.replyTo ? messages.find(m => m._id === msg.replyTo) : null;
-              const repliedSenderName = repliedMessage
-                ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName))
-                : "Someone";
-
+              const repliedSenderName = repliedMessage ? (repliedMessage.senderId === user?.id ? "You" : (isGroup ? users?.find(u => u.clerkId === repliedMessage.senderId)?.name : otherUserName)) : "Someone";
               const isSwiping = (swipeOffset[msg._id] || 0) > 0;
 
+              // =====================================
+              // NEW: The Read Receipt Math Engine!
+              // =====================================
+              let isRead = false;
+              if (conversation && isMe) {
+                if (conversation.isGroup) {
+                  const otherMembers = conversation.groupMembers?.filter(id => id !== user?.id) || [];
+                  if (otherMembers.length > 0) {
+                    // Strict mode: Only blue if ALL other members have read it!
+                    isRead = otherMembers.every(memberId => {
+                      const receipt = conversation.memberLastRead?.find(r => r.userId === memberId);
+                      return receipt && receipt.lastRead >= msg._creationTime;
+                    });
+                  }
+                } else {
+                  // 1-on-1 mode: Check the other person's exact lastRead time
+                  const isParticipantOne = conversation.participantOne === user?.id;
+                  const otherLastRead = isParticipantOne ? conversation.participantTwoLastRead : conversation.participantOneLastRead;
+                  isRead = (otherLastRead || 0) >= msg._creationTime;
+                }
+              }
+
               return (
-                <div
-                  key={msg._id}
+                <div 
+                  key={msg._id} 
                   className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"}`}
                   onTouchStart={(e) => handleTouchStart(e, msg._id)}
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
@@ -727,59 +733,44 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
                 >
-
                   {isGroup && !isMe && isFirstInGroup && sender && (
-                    <span className="text-[10px] font-medium text-muted-foreground ml-10 mb-0.5">
-                      {sender.name}
-                    </span>
+                    <span className="text-[10px] font-medium text-muted-foreground ml-10 mb-0.5">{sender.name}</span>
                   )}
 
                   <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} relative`}>
-
+                    
                     {isGroup && !isMe && (
                       <div className="w-8 shrink-0 flex justify-center">
-                        {isFirstInGroup ? (
-                          <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity border border-black/5 dark:border-white/10 shadow-sm" onClick={() => {
-                            setMemberToChat({ id: sender?.clerkId || "", name: sender?.name || "User" });
-                          }}>
-                            <AvatarImage src={sender?.imageUrl} />
-                            <AvatarFallback className="text-[10px]">{sender?.name?.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                        ) : (
-                          <div className="w-8" />
-                        )}
+                         {isFirstInGroup ? (
+                            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity border border-black/5 dark:border-white/10 shadow-sm" onClick={() => setMemberToChat({ id: sender?.clerkId || "", name: sender?.name || "User" })}>
+                              <AvatarImage src={sender?.imageUrl} />
+                              <AvatarFallback className="text-[10px]">{sender?.name?.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                         ) : <div className="w-8" />}
                       </div>
                     )}
 
                     <div
-                      className={`max-w-[75%] px-4 py-2 relative flex flex-col gap-1 ${msg.isDeleted
+                      className={`max-w-[75%] px-4 py-2 relative flex flex-col gap-1 ${
+                        msg.isDeleted
                           ? "bg-transparent border border-zinc-200 dark:border-zinc-800 text-muted-foreground italic rounded-2xl"
                           : isMe
-                            ? "bg-black text-white dark:bg-white dark:text-black rounded-2xl rounded-br-sm shadow-sm"
-                            : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
-                        }`}
+                          ? "bg-black text-white dark:bg-white dark:text-black rounded-2xl rounded-br-sm shadow-sm"
+                          : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white rounded-2xl rounded-bl-sm shadow-sm"
+                      }`}
                     >
                       {repliedMessage && !msg.isDeleted && (
                         <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
-                          onClick={() => {
-                            const el = document.getElementById(`msg-${repliedMessage._id}`);
-                            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }}
-                        >
+                             onClick={() => { const el = document.getElementById(`msg-${repliedMessage._id}`); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
                           <span className="font-bold block mb-0.5">{repliedSenderName}</span>
                           <span className="line-clamp-2">{repliedMessage.content}</span>
                         </div>
                       )}
 
                       {msg.isDeleted ? (
-                        <div className="flex items-center gap-2 text-xs opacity-70">
-                          <Ban className="h-3 w-3" />
-                          This message was deleted
-                        </div>
+                        <div className="flex items-center gap-2 text-xs opacity-70"><Ban className="h-3 w-3" />This message was deleted</div>
                       ) : (
-                        <div id={`msg-${msg._id}`}>
-                          {renderMessageContent(msg.content)}
-                        </div>
+                        <div id={`msg-${msg._id}`}>{renderMessageContent(msg.content)}</div>
                       )}
 
                       {msg.reactions && msg.reactions.length > 0 && !msg.isDeleted && (
@@ -787,17 +778,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                           {Object.entries(reactionCounts).map(([emoji, count]) => (
                             <button
                               key={emoji}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleReaction(msg._id, emoji);
-                              }}
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full border shadow-sm transition-transform hover:scale-110 flex items-center gap-1 ${myReactions.has(emoji)
-                                  ? "bg-blue-100 border-blue-200 dark:bg-blue-900/50 dark:border-blue-800"
-                                  : "bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
-                                }`}
+                              onClick={(e) => { e.stopPropagation(); handleToggleReaction(msg._id, emoji); }}
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full border shadow-sm transition-transform hover:scale-110 flex items-center gap-1 ${myReactions.has(emoji) ? "bg-blue-100 border-blue-200 dark:bg-blue-900/50 dark:border-blue-800" : "bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"}`}
                             >
-                              <span>{emoji}</span>
-                              <span className="font-bold text-muted-foreground">{count}</span>
+                              <span>{emoji}</span><span className="font-bold text-muted-foreground">{count}</span>
                             </button>
                           ))}
                         </div>
@@ -805,73 +789,35 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     </div>
 
                     {!msg.isDeleted && (
-                      <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        }`}>
-
+                      <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                         <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id);
-                            }}
-                            className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
-                          >
-                            <Smile className="h-4 w-4" />
-                          </button>
-
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"><Smile className="h-4 w-4" /></button>
                           {selectedMessageForReaction === msg._id && (
-                            <div
-                              className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
                               {EMOJIS.map((emoji) => (
-                                <button
-                                  key={emoji}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleReaction(msg._id, emoji);
-                                    setSelectedMessageForReaction(null);
-                                    setMobileActiveMessage(null);
-                                  }}
-                                  className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125"
-                                >
-                                  {emoji}
-                                </button>
+                                <button key={emoji} onClick={(e) => { e.stopPropagation(); handleToggleReaction(msg._id, emoji); setSelectedMessageForReaction(null); setMobileActiveMessage(null); }} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125">{emoji}</button>
                               ))}
                             </div>
                           )}
                         </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) });
-                          }}
-                          className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
-                          title="Reply"
-                        >
-                          <Reply className="h-4 w-4" />
-                        </button>
-
-                        {isMe && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMessageToDelete(msg._id);
-                            }}
-                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors"
-                            title="Delete message"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button onClick={(e) => { e.stopPropagation(); setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) }); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors" title="Reply"><Reply className="h-4 w-4" /></button>
+                        {isMe && <button onClick={(e) => { e.stopPropagation(); setMessageToDelete(msg._id); }} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors" title="Delete message"><Trash2 className="h-4 w-4" /></button>}
                       </div>
                     )}
                   </div>
+                  
+                  {/* NEW: The Rendered Read Receipts Interface */}
+                  <div className={`text-[10px] text-muted-foreground flex items-center gap-1 ${isGroup && !isMe ? "ml-10" : "px-1"} ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
+                    <span>{formatMessageTime(msg._creationTime)}</span>
+                    {isMe && !msg.isDeleted && (
+                      isRead ? (
+                        <CheckCheck className="h-3.5 w-3.5 text-blue-500 animate-in zoom-in duration-300" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5 text-zinc-400" />
+                      )
+                    )}
+                  </div>
 
-                  <span className={`text-[10px] text-muted-foreground ${isGroup && !isMe ? "ml-10" : "px-1"} ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
-                    {formatMessageTime(msg._creationTime)}
-                  </span>
                 </div>
               );
             })
@@ -879,67 +825,39 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
           {activeTypingUsers.length > 0 && (
             <div className="flex items-center gap-2 mt-2">
-              {isGroup && <div className="w-8 shrink-0" />}
-              <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
-                <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
-              </div>
-              <span className="text-xs text-muted-foreground animate-pulse">
-                {typingText}
-              </span>
+               {isGroup && <div className="w-8 shrink-0" />} 
+               <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1 w-fit h-9">
+                 <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                 <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                 <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
+               </div>
+               <span className="text-xs text-muted-foreground animate-pulse">{typingText}</span>
             </div>
           )}
-
           <div ref={scrollRef} />
         </div>
       </div>
 
       {showScrollButton && (
-        <Button
-          onClick={(e) => {
-            e.stopPropagation();
-            scrollToBottom();
-          }}
-          className="absolute bottom-20 left-1/2 transform -translate-x-1/2 rounded-full shadow-lg z-20"
-          size="sm"
-        >
-          <ArrowDown className="h-4 w-4 mr-1" />
-          New messages
+        <Button onClick={(e) => { e.stopPropagation(); scrollToBottom(); }} className="absolute bottom-20 left-1/2 transform -translate-x-1/2 rounded-full shadow-lg z-20" size="sm">
+          <ArrowDown className="h-4 w-4 mr-1" />New messages
         </Button>
       )}
 
       <div className="border-t bg-white dark:bg-zinc-950 relative z-20 shrink-0 pb-1">
-
         {mentionQuery !== null && isGroup && (
           <div className="absolute bottom-full left-4 mb-2 w-64 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
-            <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              Members
-            </div>
+            <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">Members</div>
             <div className="max-h-48 overflow-y-auto p-1">
-              {groupDetails?.groupMembers
-                ?.map(id => users?.find(u => u.clerkId === id))
-                .filter(u => u && u.name?.replace(/\s+/g, "").toLowerCase().includes(mentionQuery))
-                .map(u => {
+              {conversation?.groupMembers?.map(id => users?.find(u => u.clerkId === id)).filter(u => u && u.name?.replace(/\s+/g, "").toLowerCase().includes(mentionQuery)).map(u => {
                   if (!u) return null;
                   return (
-                    <button
-                      key={u.clerkId}
-                      type="button"
-                      onClick={() => handleMentionSelect(u.name || "User")}
-                      className="w-full flex items-center gap-2 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors text-left"
-                    >
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src={u.imageUrl} />
-                        <AvatarFallback className="text-[10px]">{u.name?.charAt(0)}</AvatarFallback>
-                      </Avatar>
+                    <button key={u.clerkId} type="button" onClick={() => handleMentionSelect(u.name || "User")} className="w-full flex items-center gap-2 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors text-left">
+                      <Avatar className="h-6 w-6"><AvatarImage src={u.imageUrl} /><AvatarFallback className="text-[10px]">{u.name?.charAt(0)}</AvatarFallback></Avatar>
                       <span className="text-sm font-medium">{u.name}</span>
                     </button>
                   )
                 })}
-              {groupDetails?.groupMembers?.length === 0 && (
-                <div className="p-3 text-sm text-center text-muted-foreground">No matching members</div>
-              )}
             </div>
           </div>
         )}
@@ -950,27 +868,16 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               <span className="text-xs font-bold text-blue-500 truncate mb-0.5">Replying to {replyingTo.senderName}</span>
               <span className="text-sm text-zinc-600 dark:text-zinc-400 truncate">{replyingTo.content}</span>
             </div>
-            <button onClick={() => setReplyingTo(null)} className="shrink-0 p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
-              <X className="h-4 w-4 text-zinc-500" />
-            </button>
+            <button onClick={() => setReplyingTo(null)} className="shrink-0 p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"><X className="h-4 w-4 text-zinc-500" /></button>
           </div>
         )}
 
         {isPastMember ? (
-          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
-            You left this group. You cannot send new messages.
-          </div>
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">You left this group. You cannot send new messages.</div>
         ) : (
           <form onSubmit={handleSend} className="flex gap-2 p-4">
-            <Input
-              value={newMessage}
-              onChange={handleInputChange}
-              placeholder="Type a message..."
-              className="flex-1 bg-zinc-100 dark:bg-zinc-900 border-transparent focus-visible:ring-1"
-            />
-            <Button type="submit" size="icon" disabled={!newMessage.trim()}>
-              <Send className="h-4 w-4" />
-            </Button>
+            <Input value={newMessage || ""} onChange={handleInputChange} placeholder="Type a message..." className="flex-1 bg-zinc-100 dark:bg-zinc-900 border-transparent focus-visible:ring-1" />
+            <Button type="submit" size="icon" disabled={!newMessage.trim()}><Send className="h-4 w-4" /></Button>
           </form>
         )}
       </div>
