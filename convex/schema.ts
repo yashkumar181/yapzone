@@ -41,6 +41,7 @@ export default defineSchema({
     content: v.string(),
     replyTo: v.optional(v.id("messages")),
     isDeleted: v.optional(v.boolean()),
+    isEdited: v.optional(v.boolean()), // NEW: Added this line!
     deletedFor: v.optional(v.array(v.string())),
     reactions: v.optional(
       v.array(
@@ -51,7 +52,7 @@ export default defineSchema({
       )
     ),
   }).index("by_conversationId", ["conversationId"]),
-
+  
   typingIndicators: defineTable({
     conversationId: v.id("conversations"),
     userId: v.string(),

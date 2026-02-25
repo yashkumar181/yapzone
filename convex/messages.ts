@@ -133,3 +133,33 @@ export const react = mutation({
     await ctx.db.patch(args.messageId, { reactions: newReactions });
   },
 });
+
+// NEW: Edit a message
+export const edit = mutation({
+  args: { 
+    messageId: v.id("messages"), 
+    newContent: v.string() 
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) throw new Error("Message not found");
+
+    // Security check: Only the sender can edit their message
+    if (message.senderId !== identity.subject) {
+      throw new Error("You can only edit your own messages");
+    }
+
+    // Security check: Can't edit a deleted message
+    if (message.isDeleted) {
+      throw new Error("Cannot edit a deleted message");
+    }
+
+    await ctx.db.patch(args.messageId, { 
+      content: args.newContent.trim(),
+      isEdited: true // Flag it as edited!
+    });
+  },
+});

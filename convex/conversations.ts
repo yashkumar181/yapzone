@@ -356,6 +356,7 @@ export const updateGroupDetails = mutation({
   },
 });
 
+
 // ==========================================
 // NEW: Delete / Hide a Chat
 // ==========================================
