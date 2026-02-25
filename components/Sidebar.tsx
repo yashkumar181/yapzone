@@ -313,12 +313,12 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      <div className="pt-4 flex flex-col gap-4 border-b dark:border-white/[0.08]">
+      {/* FIX: Added shrink-0 to prevent the header from squishing */}
+      <div className="shrink-0 pt-4 flex flex-col gap-4 border-b dark:border-white/[0.08]">
         <div className="flex items-center justify-between px-4">
           <h2 className="text-xl font-semibold tracking-tight">Chats</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            {/* UPDATED: This icon now opens the All Users modal! */}
             <Button variant="ghost" size="icon" onClick={() => setShowAllUsersModal(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
               <Users className="h-5 w-5" />
             </Button>
@@ -336,7 +336,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           />
         </div>
 
-        {/* UPDATED: Filter row now has the New Group button on the right! */}
         <div className="flex items-center justify-between px-4 pb-3 mt-[-4px]">
           <div className="flex items-center gap-2">
             <button onClick={() => setChatFilter("all")} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${chatFilter === 'all' ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm' : 'bg-transparent text-zinc-500 hover:bg-zinc-200/50 dark:hover:bg-white/[0.04]'}`}>All</button>
@@ -354,7 +353,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      {/* FIX: Added min-h-0 to the ScrollArea flex child */}
+      <ScrollArea className="flex-1 min-h-0">
         <div className="py-2 space-y-1">
           {searchQuery ? (
             filteredUsers === undefined ? (
