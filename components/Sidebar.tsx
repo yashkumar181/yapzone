@@ -4,8 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-// NEW: Imported Ban icon
-import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2, PlusCircle, Ban } from "lucide-react";
+// NEW: Imported Pin icon
+import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2, PlusCircle, Ban, Pin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -29,7 +29,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const { user } = useUser();
   const users = useQuery(api.users.getUsers);
   
-  // NEW: Fetch current user to get the blockedUsers array
   const currentUser = useQuery(api.users.getCurrentUser);
   
   const conversations = useQuery(api.conversations.list);
@@ -38,8 +37,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const markAsRead = useMutation(api.conversations.markAsRead);
   const deleteChatMutation = useMutation(api.conversations.deleteConversation);
   
-  // NEW: Block mutation
   const toggleBlockUser = useMutation(api.users.toggleBlockUser);
+  const togglePin = useMutation(api.conversations.togglePin); // NEW: Toggle Pin
   
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState<string | null>(null);
@@ -53,13 +52,13 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
   const [showAllUsersModal, setShowAllUsersModal] = useState(false);
   const [userToStartChat, setUserToStartChat] = useState<{id: string, name: string} | null>(null);
 
-  // UPDATED: Added otherUserClerkId and isGroup to know who to block
   const [contextMenu, setContextMenu] = useState<{ 
     id: Id<"conversations">, 
     x: number, 
     y: number,
     otherUserClerkId?: string,
-    isGroup?: boolean
+    isGroup?: boolean,
+    isPinned?: boolean // NEW
   } | null>(null);
   
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -79,6 +78,13 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     if (chatFilter === "groups") return conv.isGroup;
     return true; 
   });
+
+  // NEW: Sort filtered conversations to push pinned ones to the top
+  const sortedConversations = filteredConversations ? [...filteredConversations].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return 0; // Fallback to Convex's time-based sort
+  }) : undefined;
 
   const handleStartChat = async (otherUserId: string, otherUserName: string) => {
     setIsCreating(otherUserId);
@@ -115,7 +121,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     }
   };
 
-  // NEW: Handle block toggle
   const handleToggleBlock = async (clerkIdToToggle: string, currentlyBlocked: boolean) => {
     try {
       await toggleBlockUser({ clerkIdToToggle });
@@ -123,6 +128,16 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       setContextMenu(null);
     } catch (error) {
       toast.error("Failed to update block status");
+    }
+  };
+
+  const handleTogglePin = async (conversationId: Id<"conversations">, isCurrentlyPinned: boolean) => {
+    try {
+      await togglePin({ conversationId });
+      toast.success(isCurrentlyPinned ? "Conversation unpinned" : "Conversation pinned");
+      setContextMenu(null);
+    } catch (error) {
+      toast.error("Failed to pin conversation");
     }
   };
 
@@ -161,7 +176,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     return "";
   };
 
-  // UPDATED: Pass extra data to context menu
   const handleTouchStart = (e: React.TouchEvent, conv: any) => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     const touch = e.touches[0];
@@ -171,7 +185,8 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         x: touch.clientX, 
         y: touch.clientY,
         otherUserClerkId: conv.otherUser?.clerkId,
-        isGroup: conv.isGroup
+        isGroup: conv.isGroup,
+        isPinned: conv.isPinned
       });
       if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50);
@@ -192,7 +207,15 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* NEW: Block / Unblock Button (Only shows for DMs) */}
+          {/* NEW: Pin / Unpin Button */}
+          <button 
+            className="w-full text-left px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+            onClick={() => handleTogglePin(contextMenu.id, !!contextMenu.isPinned)}
+          >
+            <Pin className={`h-4 w-4 ${contextMenu.isPinned ? "fill-current" : ""}`} />
+            {contextMenu.isPinned ? "Unpin Chat" : "Pin Chat"}
+          </button>
+
           {!contextMenu.isGroup && contextMenu.otherUserClerkId && (
             <button 
               className="w-full text-left px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 transition-colors"
@@ -216,7 +239,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* NEW: Start Direct Chat Confirmation Prompt */}
       {userToStartChat && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setUserToStartChat(null); }}>
           <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 rounded-2xl shadow-xl max-w-sm w-full flex flex-col gap-4 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -243,7 +265,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* NEW: All Users Modal */}
       {showAllUsersModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
           <div className="shrink-0 p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
@@ -279,7 +300,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
         </div>
       )}
 
-      {/* Existing Group Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
           <div className="shrink-0 p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
@@ -436,7 +456,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
               </>
             )
           ) : (
-            filteredConversations === undefined ? (
+            sortedConversations === undefined ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 mx-2 my-1">
                   <Skeleton className="h-10 w-10 rounded-full" />
@@ -446,17 +466,17 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                   </div>
                 </div>
               ))
-            ) : filteredConversations.length === 0 ? (
+            ) : sortedConversations.length === 0 ? (
                <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3 opacity-70">
                 <MessageSquare className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">No {chatFilter === "all" ? "chats" : chatFilter} found.</p>
               </div>
             ) : (
-              filteredConversations.map((conv) => (
+              // UPDATED: Now mapping over the sorted list!
+              sortedConversations.map((conv) => (
                 <div 
                   key={conv._id}
                   className="relative"
-                  // UPDATED: Now passing conv directly to handleTouchStart and passing data to right-click context
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setContextMenu({ 
@@ -464,14 +484,15 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                       x: e.clientX, 
                       y: e.clientY,
                       otherUserClerkId: conv.otherUser?.clerkId,
-                      isGroup: conv.isGroup
+                      isGroup: conv.isGroup,
+                      isPinned: conv.isPinned
                     });
                   }}
                 >
                   <button
                     className="w-[calc(100%-16px)] mx-2 my-1 flex items-center gap-3 p-3 rounded-xl cursor-pointer bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-white/5 shadow-sm hover:shadow-md hover:bg-zinc-50 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left group relative"
                     onClick={() => handleSelectConversation(conv)}
-                    onTouchStart={(e) => handleTouchStart(e, conv)} // Passed conv here
+                    onTouchStart={(e) => handleTouchStart(e, conv)}
                     onTouchMove={handleTouchEndOrMove}
                     onTouchEnd={handleTouchEndOrMove}
                   >
@@ -503,6 +524,10 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                           {conv.isGroup ? conv.groupName : conv.otherUser?.name}
                         </span>
                         <div className="flex items-center gap-2">
+                          {/* NEW: Show Pin Icon */}
+                          {conv.isPinned && (
+                            <Pin className="h-3 w-3 text-muted-foreground fill-current" />
+                          )}
                           {conv.unreadCount > 0 && (
                             <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[1.25rem] shadow-[0_0_10px_rgba(59,130,246,0.4)]">
                               {conv.unreadCount}

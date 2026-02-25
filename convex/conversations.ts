@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-// Create or Fetch a Chat
 export const getOrCreate = mutation({
   args: { otherUserId: v.string() },
   handler: async (ctx, args) => {
@@ -11,7 +10,6 @@ export const getOrCreate = mutation({
     const myId = identity.subject;
     const otherId = args.otherUserId;
 
-    // Check if conversation already exists (and ensure it's not a group)
     const conv1 = await ctx.db
       .query("conversations")
       .withIndex("by_participantOne", (q) => q.eq("participantOne", myId))
@@ -19,7 +17,13 @@ export const getOrCreate = mutation({
       .filter((q) => q.neq(q.field("isGroup"), true))
       .first();
 
-    if (conv1) return conv1._id;
+    // FIX: If the chat exists but was deleted, "un-delete" it!
+    if (conv1) {
+      if (conv1.deletedBy?.includes(myId)) {
+        await ctx.db.patch(conv1._id, { deletedBy: conv1.deletedBy.filter(id => id !== myId) });
+      }
+      return conv1._id;
+    }
 
     const conv2 = await ctx.db
       .query("conversations")
@@ -28,7 +32,12 @@ export const getOrCreate = mutation({
       .filter((q) => q.neq(q.field("isGroup"), true))
       .first();
 
-    if (conv2) return conv2._id;
+    if (conv2) {
+      if (conv2.deletedBy?.includes(myId)) {
+        await ctx.db.patch(conv2._id, { deletedBy: conv2.deletedBy.filter(id => id !== myId) });
+      }
+      return conv2._id;
+    }
 
     return await ctx.db.insert("conversations", {
       participantOne: myId,
@@ -40,7 +49,6 @@ export const getOrCreate = mutation({
   },
 });
 
-// List Conversations with Unread Counts 
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -49,24 +57,13 @@ export const list = query({
 
     const myId = identity.subject;
 
-    const conv1 = await ctx.db
-      .query("conversations")
-      .withIndex("by_participantOne", (q) => q.eq("participantOne", myId))
-      .collect();
+    const conv1 = await ctx.db.query("conversations").withIndex("by_participantOne", (q) => q.eq("participantOne", myId)).collect();
+    const conv2 = await ctx.db.query("conversations").withIndex("by_participantTwo", (q) => q.eq("participantTwo", myId)).collect();
 
-    const conv2 = await ctx.db
-      .query("conversations")
-      .withIndex("by_participantTwo", (q) => q.eq("participantTwo", myId))
-      .collect();
-
-    // FIXED: Filter out 1-on-1 chats you have deleted!
     const activeConv1 = conv1.filter(c => !c.deletedBy?.includes(myId));
     const activeConv2 = conv2.filter(c => !c.deletedBy?.includes(myId));
 
-    const allGroups = await ctx.db
-      .query("conversations")
-      .filter((q) => q.eq(q.field("isGroup"), true))
-      .collect();
+    const allGroups = await ctx.db.query("conversations").filter((q) => q.eq(q.field("isGroup"), true)).collect();
     
     const myGroups = allGroups.filter(group => {
       const isInGroup = group.groupMembers?.includes(myId);
@@ -75,42 +72,20 @@ export const list = query({
       return (isInGroup || isPastMember) && !isDeletedForMe;
     });
 
-    // FIXED: Combine using the active (filtered) conversations
     const allConversations = [...activeConv1, ...activeConv2, ...myGroups].filter(
       (v, i, a) => a.findIndex((t) => t._id === v._id) === i
     );
 
     const enrichedConversations = await Promise.all(
       allConversations.map(async (conv) => {
+        const isPinned = (conv.pinnedBy || []).includes(myId); // NEW: Get pin status
+
         if (conv.isGroup) {
-           const lastMessage = await ctx.db
-            .query("messages")
-            .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
-            .order("desc")
-            .first();
-
-            const memberProfiles = await Promise.all(
-              (conv.groupMembers || []).map(async (memberId) => {
-                return await ctx.db
-                  .query("users")
-                  .withIndex("by_clerkId", (q) => q.eq("clerkId", memberId))
-                  .first();
-              })
-            );
-
+           const lastMessage = await ctx.db.query("messages").withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id)).order("desc").first();
+            const memberProfiles = await Promise.all((conv.groupMembers || []).map(async (memberId) => await ctx.db.query("users").withIndex("by_clerkId", (q) => q.eq("clerkId", memberId)).first()));
             const myReadRecord = (conv.memberLastRead || []).find(r => r.userId === myId);
             const myLastRead = myReadRecord ? myReadRecord.lastRead : conv._creationTime;
-
-            const unreadMessages = await ctx.db
-              .query("messages")
-              .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
-              .filter((q) => 
-                q.and(
-                  q.gt(q.field("_creationTime"), myLastRead),
-                  q.neq(q.field("senderId"), myId)
-                )
-              )
-              .collect();
+            const unreadMessages = await ctx.db.query("messages").withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id)).filter((q) => q.and(q.gt(q.field("_creationTime"), myLastRead), q.neq(q.field("senderId"), myId))).collect();
 
             return {
               _id: conv._id,
@@ -123,35 +98,15 @@ export const list = query({
               lastMessage,
               unreadCount: unreadMessages.length, 
               _creationTime: conv._creationTime,
+              isPinned, // NEW
             };
         }
 
         const otherUserId = conv.participantOne === myId ? conv.participantTwo : conv.participantOne;
-        const myLastRead = conv.participantOne === myId 
-          ? conv.participantOneLastRead || 0 
-          : conv.participantTwoLastRead || 0;
-
-        const otherUser = await ctx.db
-          .query("users")
-          .withIndex("by_clerkId", (q) => q.eq("clerkId", otherUserId as string))
-          .first();
-
-        const lastMessage = await ctx.db
-          .query("messages")
-          .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
-          .order("desc")
-          .first();
-
-        const unreadMessages = await ctx.db
-          .query("messages")
-          .withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id))
-          .filter((q) => 
-            q.and(
-              q.gt(q.field("_creationTime"), myLastRead),
-              q.neq(q.field("senderId"), myId)
-            )
-          )
-          .collect();
+        const myLastRead = conv.participantOne === myId ? conv.participantOneLastRead || 0 : conv.participantTwoLastRead || 0;
+        const otherUser = await ctx.db.query("users").withIndex("by_clerkId", (q) => q.eq("clerkId", otherUserId as string)).first();
+        const lastMessage = await ctx.db.query("messages").withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id)).order("desc").first();
+        const unreadMessages = await ctx.db.query("messages").withIndex("by_conversationId", (q) => q.eq("conversationId", conv._id)).filter((q) => q.and(q.gt(q.field("_creationTime"), myLastRead), q.neq(q.field("senderId"), myId))).collect();
 
         return {
           _id: conv._id,
@@ -162,6 +117,7 @@ export const list = query({
           lastMessage,
           unreadCount: unreadMessages.length,
           _creationTime: conv._creationTime,
+          isPinned, // NEW
         };
       })
     );
@@ -172,6 +128,25 @@ export const list = query({
       return bTime - aTime;
     });
   },
+});
+
+// NEW: Pin Mutation
+export const togglePin = mutation({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    const myId = identity.subject;
+
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv) throw new Error("Conversation not found");
+
+    const pinnedBy = conv.pinnedBy || [];
+    const isPinned = pinnedBy.includes(myId);
+    const newPinnedBy = isPinned ? pinnedBy.filter(id => id !== myId) : [...pinnedBy, myId];
+
+    await ctx.db.patch(args.conversationId, { pinnedBy: newPinnedBy });
+  }
 });
 
 export const markAsRead = mutation({
@@ -303,9 +278,6 @@ export const kickMember = mutation({
   },
 });
 
-// ==========================================
-// NEW: Add Members to Existing Group
-// ==========================================
 export const addMembers = mutation({
   args: { 
     conversationId: v.id("conversations"),
@@ -318,7 +290,6 @@ export const addMembers = mutation({
 
     const conv = await ctx.db.get(args.conversationId);
     if (!conv || !conv.isGroup) throw new Error("Not a group");
-    
     if (conv.groupAdmin !== myId) throw new Error("Only the admin can add members");
 
     const currentMembers = conv.groupMembers || [];
@@ -330,9 +301,6 @@ export const addMembers = mutation({
   },
 });
 
-// ==========================================
-// NEW: Update Group Details (PFP & Description)
-// ==========================================
 export const updateGroupDetails = mutation({
   args: { 
     conversationId: v.id("conversations"),
@@ -357,9 +325,6 @@ export const updateGroupDetails = mutation({
 });
 
 
-// ==========================================
-// NEW: Delete / Hide a Chat
-// ==========================================
 export const deleteConversation = mutation({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
@@ -370,16 +335,12 @@ export const deleteConversation = mutation({
     const conv = await ctx.db.get(args.conversationId);
     if (!conv) throw new Error("Conversation not found");
 
-    // Push the user's ID into the deletedBy array so it hides from their list
     await ctx.db.patch(args.conversationId, {
       deletedBy: [...(conv.deletedBy || []), myId]
     });
   },
 });
 
-// ==========================================
-// NEW: Get Conversation Details (For Read Receipts)
-// ==========================================
 export const getConversation = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {

@@ -8,7 +8,7 @@ export default defineSchema({
     name: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     lastSeen: v.optional(v.number()),
-    blockedUsers: v.optional(v.array(v.string())),
+    blockedUsers: v.optional(v.array(v.string())), 
   }).index("by_clerkId", ["clerkId"]),
 
   conversations: defineTable({
@@ -18,12 +18,14 @@ export default defineSchema({
     participantTwoLastRead: v.optional(v.number()),
     isGroup: v.optional(v.boolean()),
     groupName: v.optional(v.string()),
-    groupDescription: v.optional(v.string()), // NEW: Added Description
-    groupImageUrl: v.optional(v.string()),    // NEW: Added PFP URL
+    groupDescription: v.optional(v.string()), 
+    groupImageUrl: v.optional(v.string()),    
     groupMembers: v.optional(v.array(v.string())),
     groupAdmin: v.optional(v.string()),
     pastMembers: v.optional(v.array(v.string())), 
     deletedBy: v.optional(v.array(v.string())),
+    // NEW: Array to store who pinned this conversation
+    pinnedBy: v.optional(v.array(v.string())),
     memberLastRead: v.optional(
       v.array(
         v.object({
@@ -42,7 +44,7 @@ export default defineSchema({
     content: v.string(),
     replyTo: v.optional(v.id("messages")),
     isDeleted: v.optional(v.boolean()),
-    isEdited: v.optional(v.boolean()), // NEW: Added this line!
+    isEdited: v.optional(v.boolean()), 
     deletedFor: v.optional(v.array(v.string())),
     reactions: v.optional(
       v.array(
