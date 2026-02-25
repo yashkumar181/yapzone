@@ -8,6 +8,7 @@ export default defineSchema({
     name: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     lastSeen: v.optional(v.number()),
+    blockedUsers: v.optional(v.array(v.string())),
   }).index("by_clerkId", ["clerkId"]),
 
   conversations: defineTable({

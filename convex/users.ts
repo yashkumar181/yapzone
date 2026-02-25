@@ -68,3 +68,52 @@ export const updatePresence = mutation({
     }
   },
 });
+
+// NEW: Query to get the current logged-in user's full profile
+export const getCurrentUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    return await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
+      .first();
+  },
+});
+
+// NEW: Mutation to toggle block/unblock a specific user
+export const toggleBlockUser = mutation({
+  args: {
+    clerkIdToToggle: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const currentUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!currentUser) throw new Error("User not found");
+
+    const blockedUsers = currentUser.blockedUsers || [];
+    let newBlockedUsers;
+
+    if (blockedUsers.includes(args.clerkIdToToggle)) {
+      // They are already blocked -> Unblock them
+      newBlockedUsers = blockedUsers.filter((id) => id !== args.clerkIdToToggle);
+    } else {
+      // They are not blocked -> Block them
+      newBlockedUsers = [...blockedUsers, args.clerkIdToToggle];
+    }
+
+    await ctx.db.patch(currentUser._id, {
+      blockedUsers: newBlockedUsers,
+    });
+
+    return newBlockedUsers;
+  },
+});

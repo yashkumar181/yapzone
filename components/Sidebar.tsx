@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2, PlusCircle } from "lucide-react";
+// NEW: Imported Ban icon
+import { Search, Loader2, SearchX, MessageSquare, Users, X, Check, Trash2, PlusCircle, Ban } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,27 +28,40 @@ const isOnline = (lastSeen?: number) => {
 export function Sidebar({ onSelectChat }: SidebarProps) {
   const { user } = useUser();
   const users = useQuery(api.users.getUsers);
+  
+  // NEW: Fetch current user to get the blockedUsers array
+  const currentUser = useQuery(api.users.getCurrentUser);
+  
   const conversations = useQuery(api.conversations.list);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const createGroup = useMutation(api.conversations.createGroup);
   const markAsRead = useMutation(api.conversations.markAsRead);
   const deleteChatMutation = useMutation(api.conversations.deleteConversation);
   
+  // NEW: Block mutation
+  const toggleBlockUser = useMutation(api.users.toggleBlockUser);
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState<string | null>(null);
   const [chatFilter, setChatFilter] = useState<"all" | "dms" | "groups">("all");
 
-  // Group Modal State
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
-  // NEW: All Users Modal State
   const [showAllUsersModal, setShowAllUsersModal] = useState(false);
   const [userToStartChat, setUserToStartChat] = useState<{id: string, name: string} | null>(null);
 
-  const [contextMenu, setContextMenu] = useState<{ id: Id<"conversations">, x: number, y: number } | null>(null);
+  // UPDATED: Added otherUserClerkId and isGroup to know who to block
+  const [contextMenu, setContextMenu] = useState<{ 
+    id: Id<"conversations">, 
+    x: number, 
+    y: number,
+    otherUserClerkId?: string,
+    isGroup?: boolean
+  } | null>(null);
+  
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -73,7 +87,7 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       onSelectChat(conversationId, otherUserName, false);
       await markAsRead({ conversationId });
       setSearchQuery(""); 
-      setShowAllUsersModal(false); // Close the new modal if open
+      setShowAllUsersModal(false);
     } catch (error) {
       console.error("Failed to create chat:", error);
     } finally {
@@ -98,6 +112,17 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       setContextMenu(null);
     } catch (error) {
       toast.error("Failed to delete chat");
+    }
+  };
+
+  // NEW: Handle block toggle
+  const handleToggleBlock = async (clerkIdToToggle: string, currentlyBlocked: boolean) => {
+    try {
+      await toggleBlockUser({ clerkIdToToggle });
+      toast.success(currentlyBlocked ? "User unblocked" : "User blocked");
+      setContextMenu(null);
+    } catch (error) {
+      toast.error("Failed to update block status");
     }
   };
 
@@ -136,11 +161,18 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
     return "";
   };
 
-  const handleTouchStart = (e: React.TouchEvent, convId: Id<"conversations">) => {
+  // UPDATED: Pass extra data to context menu
+  const handleTouchStart = (e: React.TouchEvent, conv: any) => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     const touch = e.touches[0];
     longPressTimerRef.current = setTimeout(() => {
-      setContextMenu({ id: convId, x: touch.clientX, y: touch.clientY });
+      setContextMenu({ 
+        id: conv._id, 
+        x: touch.clientX, 
+        y: touch.clientY,
+        otherUserClerkId: conv.otherUser?.clerkId,
+        isGroup: conv.isGroup
+      });
       if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50);
       }
@@ -160,6 +192,20 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* NEW: Block / Unblock Button (Only shows for DMs) */}
+          {!contextMenu.isGroup && contextMenu.otherUserClerkId && (
+            <button 
+              className="w-full text-left px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+              onClick={() => {
+                const isBlocked = currentUser?.blockedUsers?.includes(contextMenu.otherUserClerkId!);
+                handleToggleBlock(contextMenu.otherUserClerkId!, !!isBlocked);
+              }}
+            >
+              <Ban className="h-4 w-4" />
+              {currentUser?.blockedUsers?.includes(contextMenu.otherUserClerkId) ? "Unblock User" : "Block User"}
+            </button>
+          )}
+
           <button 
             className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 transition-colors"
             onClick={() => handleDeleteChat(contextMenu.id)}
@@ -200,7 +246,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       {/* NEW: All Users Modal */}
       {showAllUsersModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
-          {/* FIX: added shrink-0 to prevent squishing */}
           <div className="shrink-0 p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
             <h2 className="font-bold text-lg">People on YapZone</h2>
             <Button variant="ghost" size="icon" onClick={() => setShowAllUsersModal(false)}>
@@ -208,7 +253,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
             </Button>
           </div>
           
-          {/* FIX: added min-h-0 to lock scroll area height */}
           <ScrollArea className="flex-1 min-h-0 p-2">
             {users?.filter(u => u.clerkId !== user?.id).map((u) => (
               <button
@@ -238,7 +282,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
       {/* Existing Group Modal */}
       {showGroupModal && (
         <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in slide-in-from-bottom-4 duration-200">
-          {/* FIX: added shrink-0 */}
           <div className="shrink-0 p-4 border-b flex items-center justify-between bg-white dark:bg-zinc-950">
             <h2 className="font-bold text-lg">New Group</h2>
             <Button variant="ghost" size="icon" onClick={() => setShowGroupModal(false)}>
@@ -246,7 +289,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
             </Button>
           </div>
 
-          {/* FIX: added shrink-0 */}
           <div className="shrink-0 p-4 border-b space-y-4 bg-white dark:bg-zinc-950">
             <Input
               placeholder="Group Subject"
@@ -280,7 +322,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
             )}
           </div>
 
-          {/* FIX: added min-h-0 */}
           <ScrollArea className="flex-1 min-h-0 p-2">
             <p className="text-xs font-semibold text-muted-foreground px-2 py-2 uppercase tracking-wider">Select Members</p>
             {users?.map((user) => (
@@ -305,7 +346,6 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
             ))}
           </ScrollArea>
 
-          {/* FIX: added shrink-0 */}
           <div className="shrink-0 p-4 border-t bg-white dark:bg-zinc-950">
             <Button 
               className="w-full rounded-full font-bold" 
@@ -416,15 +456,22 @@ export function Sidebar({ onSelectChat }: SidebarProps) {
                 <div 
                   key={conv._id}
                   className="relative"
+                  // UPDATED: Now passing conv directly to handleTouchStart and passing data to right-click context
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    setContextMenu({ id: conv._id, x: e.clientX, y: e.clientY });
+                    setContextMenu({ 
+                      id: conv._id, 
+                      x: e.clientX, 
+                      y: e.clientY,
+                      otherUserClerkId: conv.otherUser?.clerkId,
+                      isGroup: conv.isGroup
+                    });
                   }}
                 >
                   <button
                     className="w-[calc(100%-16px)] mx-2 my-1 flex items-center gap-3 p-3 rounded-xl cursor-pointer bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-white/5 shadow-sm hover:shadow-md hover:bg-zinc-50 dark:hover:bg-white/[0.04] active:scale-[0.98] transition-all text-left group relative"
                     onClick={() => handleSelectConversation(conv)}
-                    onTouchStart={(e) => handleTouchStart(e, conv._id)}
+                    onTouchStart={(e) => handleTouchStart(e, conv)} // Passed conv here
                     onTouchMove={handleTouchEndOrMove}
                     onTouchEnd={handleTouchEndOrMove}
                   >

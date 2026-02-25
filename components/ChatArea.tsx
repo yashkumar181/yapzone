@@ -29,6 +29,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
 
+  // NEW: Fetch current user and toggle block mutation
+  const currentUser = useQuery(api.users.getCurrentUser);
+  const toggleBlockUser = useMutation(api.users.toggleBlockUser);
+
   const messages = useQuery(api.messages.list, { conversationId });
   const users = useQuery(api.users.getUsers);
   const conversation = useQuery(api.conversations.getConversation, { conversationId });
@@ -59,6 +63,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  // NEW: State for User Info drawer
+  const [showUserInfo, setShowUserInfo] = useState(false);
+
   const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const kickMemberMutation = useMutation(api.conversations.kickMember);
@@ -71,6 +78,11 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const isPastMember = conversation?.pastMembers?.includes(user?.id || "");
   const isAdmin = conversation?.groupAdmin === user?.id;
+
+  // Derive other user info for 1-on-1 chats
+  const otherUserId = !isGroup && conversation ? (conversation.participantOne === user?.id ? conversation.participantTwo : conversation.participantOne) : null;
+  const otherUserObj = users?.find(u => u.clerkId === otherUserId);
+  const isBlockedByMe = otherUserId ? currentUser?.blockedUsers?.includes(otherUserId) : false;
 
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
@@ -178,8 +190,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     try {
       await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
       setReplyingTo(null);
-    } catch (error) {
-      toast.error("Failed to send message.");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send message.");
       setNewMessage(content);
     }
   };
@@ -493,8 +505,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div
-          className={`flex flex-col ${isGroup ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
-          onClick={() => isGroup && setShowGroupInfo(true)}
+          className="flex flex-col cursor-pointer hover:opacity-70 transition-opacity"
+          // UPDATED: Open group info OR user info based on chat type
+          onClick={() => isGroup ? setShowGroupInfo(true) : setShowUserInfo(true)}
         >
           <div className="flex items-center gap-2">
             {isGroup && conversation?.groupImageUrl && (
@@ -502,10 +515,60 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             )}
             <h3 className="font-semibold text-lg">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
           </div>
-          {isGroup && <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Tap here for group info</span>}
+          <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+            Tap here for {isGroup ? "group" : "user"} info
+          </span>
         </div>
       </div>
 
+      {/* NEW: User Info Drawer for 1-on-1 chats */}
+      {showUserInfo && !isGroup && otherUserObj && (
+        <>
+          <div
+            className="absolute inset-0 z-40 bg-black/5 dark:bg-black/40 backdrop-blur-[1px] transition-all"
+            onClick={() => setShowUserInfo(false)}
+          />
+          <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white dark:bg-zinc-950 border-l dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-4 border-b flex items-center gap-3 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
+              <Button variant="ghost" size="icon" onClick={() => setShowUserInfo(false)} className="-ml-2 shrink-0">
+                <X className="h-5 w-5" />
+              </Button>
+              <h2 className="font-bold text-lg truncate">User Info</h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div className="flex flex-col items-center justify-center gap-1 mt-6">
+                <Avatar className="h-24 w-24 border shadow-sm">
+                  <AvatarImage src={otherUserObj.imageUrl} />
+                  <AvatarFallback className="text-3xl">{otherUserObj.name?.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <h3 className="font-bold text-xl mt-4 px-6 text-center">{otherUserObj.name}</h3>
+              </div>
+            </div>
+
+            <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
+              <Button 
+                variant={isBlockedByMe ? "default" : "destructive"} 
+                className="w-full font-bold" 
+                onClick={async () => {
+                  if (!otherUserId) return;
+                  try {
+                    await toggleBlockUser({ clerkIdToToggle: otherUserId });
+                    toast.success(isBlockedByMe ? "User unblocked" : "User blocked");
+                  } catch (error) {
+                    toast.error("Failed to update block status");
+                  }
+                }}
+              >
+                <Ban className="h-4 w-4 mr-2" />
+                {isBlockedByMe ? "Unblock User" : "Block User"}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Existing Group Info Drawer */}
       {showGroupInfo && isGroup && conversation && (
         <>
           <div
@@ -778,7 +841,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         </div>
                       )}
 
-                      {/* FIXED UI: Strict box constraints for the Input */}
                       {editingMessageId === msg._id ? (
                         <div
                           className="flex flex-col gap-2 w-full max-w-full overflow-hidden"
@@ -924,8 +986,15 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           </div>
         )}
 
-        {isPastMember ? (
-          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">You left this group. You cannot send new messages.</div>
+        {/* UPDATED: Input area restriction based on Block status */}
+        {isBlockedByMe ? (
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">
+            You blocked this user. Unblock them to send messages.
+          </div>
+        ) : isPastMember ? (
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
+            You left this group. You cannot send new messages.
+          </div>
         ) : (
           <form onSubmit={handleSend} className="flex gap-2 p-4">
             <Input value={newMessage || ""} onChange={handleInputChange} placeholder="Type a message..." className="flex-1 bg-zinc-100 dark:bg-zinc-900 border-transparent focus-visible:ring-1" />
