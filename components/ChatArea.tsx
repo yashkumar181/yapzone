@@ -40,7 +40,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [isSearching, setIsSearching] = useState(false);
   const [searchQueryInput, setSearchQueryInput] = useState("");
   const [highlightedMessageId, setHighlightedMessageId] = useState<Id<"messages"> | null>(null);
-  const searchResults = useQuery(api.messages.searchMessages, 
+  const searchResults = useQuery(api.messages.searchMessages,
     isSearching && searchQueryInput.trim() ? { conversationId, query: searchQueryInput } : "skip"
   );
 
@@ -88,7 +88,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const otherUserId = !isGroup && conversation ? (conversation.participantOne === user?.id ? conversation.participantTwo : conversation.participantOne) : null;
   const otherUserObj = users?.find(u => u.clerkId === otherUserId);
-  
+
   const isChatReady = currentUser !== undefined && users !== undefined && conversation !== undefined;
   const isBlockedByMe = isChatReady && otherUserId ? (currentUser?.blockedUsers || []).includes(otherUserId) : false;
   const hasBlockedMe = isChatReady && otherUserObj ? (otherUserObj.blockedUsers || []).includes(user?.id || "") : false;
@@ -105,7 +105,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [swipeOffset, setSwipeOffset] = useState<{ [key: string]: number }>({});
   const swipeStartRef = useRef<{ id: string; x: number } | null>(null);
 
-  // FIX 1: Automatically reset Search UI when the conversation changes!
   useEffect(() => {
     setIsSearching(false);
     setSearchQueryInput("");
@@ -119,7 +118,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(msgId);
-      setTimeout(() => setHighlightedMessageId(null), 2500); 
+      setTimeout(() => setHighlightedMessageId(null), 2500);
     } else {
       toast.error("Message not loaded yet.");
     }
@@ -128,7 +127,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const handleGlobalTap = () => {
     if (mobileActiveMessage) setMobileActiveMessage(null);
     if (selectedMessageForReaction) setSelectedMessageForReaction(null);
-    // FIX 2: Close search when tapping anywhere else on the screen
     if (isSearching) setIsSearching(false);
   };
 
@@ -556,21 +554,20 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 </Avatar>
               )}
               <div className="flex flex-col">
-                 <h3 className="font-semibold text-base leading-none">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
-                 <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-1">Tap here for info</span>
+                <h3 className="font-semibold text-base leading-none">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-1">Tap here for info</span>
               </div>
             </div>
           </div>
         </div>
 
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          // FIX 3: Stop propagation so the button click doesn't instantly trigger handleGlobalTap
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={(e) => {
-            e.stopPropagation(); 
+            e.stopPropagation();
             setIsSearching(!isSearching);
-          }} 
+          }}
           className={`text-muted-foreground transition-colors ${isSearching ? 'bg-zinc-100 dark:bg-zinc-800 text-foreground' : 'hover:text-foreground'}`}
         >
           <Search className="h-5 w-5" />
@@ -578,41 +575,40 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       </div>
 
       {isSearching && (
-         <div 
-           className="absolute top-[76px] left-0 w-full z-30 bg-white dark:bg-zinc-950 border-b dark:border-zinc-800 p-3 shadow-md animate-in slide-in-from-top-2"
-           // FIX 4: Stop propagation so interacting with the search bar doesn't close it
-           onClick={(e) => e.stopPropagation()} 
-         >
-           <div className="relative">
-             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-             <Input 
-               autoFocus
-               placeholder="Search for messages in this chat..." 
-               value={searchQueryInput}
-               onChange={(e) => setSearchQueryInput(e.target.value)}
-               className="pl-9 bg-zinc-100 dark:bg-zinc-900 border-transparent shadow-inner"
-             />
-             {searchQueryInput && (
-               <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7 text-muted-foreground" onClick={() => setSearchQueryInput("")}>
-                 <X className="h-4 w-4" />
-               </Button>
-             )}
-           </div>
-           {searchQueryInput && searchResults && (
-             <div className="mt-3 max-h-64 overflow-y-auto bg-white dark:bg-zinc-950 border dark:border-zinc-800 rounded-xl shadow-xl divide-y dark:divide-zinc-800">
-               {searchResults.length === 0 ? (
-                  <div className="p-6 text-center text-sm font-medium text-muted-foreground">No matches found.</div>
-               ) : (
-                  searchResults.map(res => (
-                    <button key={res._id} onClick={() => scrollToMessage(res._id)} className="w-full text-left p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
-                       <span className="text-[10px] font-bold text-blue-500 mb-1 block uppercase tracking-wider">{formatMessageTime(res._creationTime)}</span>
-                       <p className="text-sm truncate text-zinc-700 dark:text-zinc-300 font-medium">{res.content}</p>
-                    </button>
-                  ))
-               )}
-             </div>
-           )}
-         </div>
+        <div
+          className="absolute top-[76px] left-0 w-full z-30 bg-white dark:bg-zinc-950 border-b dark:border-zinc-800 p-3 shadow-md animate-in slide-in-from-top-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoFocus
+              placeholder="Search for messages in this chat..."
+              value={searchQueryInput}
+              onChange={(e) => setSearchQueryInput(e.target.value)}
+              className="pl-9 bg-zinc-100 dark:bg-zinc-900 border-transparent shadow-inner"
+            />
+            {searchQueryInput && (
+              <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7 text-muted-foreground" onClick={() => setSearchQueryInput("")}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {searchQueryInput && searchResults && (
+            <div className="mt-3 max-h-64 overflow-y-auto bg-white dark:bg-zinc-950 border dark:border-zinc-800 rounded-xl shadow-xl divide-y dark:divide-zinc-800">
+              {searchResults.length === 0 ? (
+                <div className="p-6 text-center text-sm font-medium text-muted-foreground">No matches found.</div>
+              ) : (
+                searchResults.map(res => (
+                  <button key={res._id} onClick={() => scrollToMessage(res._id)} className="w-full text-left p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
+                    <span className="text-[10px] font-bold text-blue-500 mb-1 block uppercase tracking-wider">{formatMessageTime(res._creationTime)}</span>
+                    <p className="text-sm truncate text-zinc-700 dark:text-zinc-300 font-medium">{res.content}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {showUserInfo && !isGroup && otherUserObj && (
@@ -639,10 +635,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               </div>
 
               <div className="flex flex-col gap-3 mt-8">
-                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
-                 <Button 
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
+                <Button
                   variant="outline"
-                  className="w-full justify-start h-12 rounded-xl" 
+                  className="w-full justify-start h-12 rounded-xl"
                   onClick={async () => {
                     try {
                       await togglePin({ conversationId });
@@ -659,9 +655,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-              <Button 
-                variant={isBlockedByMe ? "default" : "destructive"} 
-                className="w-full font-bold h-12 rounded-xl" 
+              <Button
+                variant={isBlockedByMe ? "default" : "destructive"}
+                className="w-full font-bold h-12 rounded-xl"
                 onClick={async () => {
                   if (!otherUserId) return;
                   try {
@@ -789,9 +785,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
                   <div className="space-y-3">
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
-                    <Button 
+                    <Button
                       variant="outline"
-                      className="w-full justify-start h-12 rounded-xl mb-4" 
+                      className="w-full justify-start h-12 rounded-xl mb-4"
                       onClick={async () => {
                         try {
                           await togglePin({ conversationId });
@@ -927,7 +923,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 <div
                   id={`msg-container-${msg._id}`}
                   key={msg._id}
-                  className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"} ${highlightedMessageId === msg._id ? "bg-blue-500/20 dark:bg-blue-500/30 p-2 rounded-xl transition-all duration-500" : "transition-all duration-500 p-0"}`}
+                  // FIX 1: Added relative and w-full so we can position absolute children directly in the center of the column
+                  className={`relative w-full flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"} ${highlightedMessageId === msg._id ? "bg-blue-500/20 dark:bg-blue-500/30 p-2 rounded-xl transition-all duration-500" : "transition-all duration-500 p-0"}`}
                   onTouchStart={(e) => handleTouchStart(e, msg._id)}
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
                   onTouchMove={(e) => handleTouchMove(e, msg._id)}
@@ -936,6 +933,31 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
                 >
+
+                  {/* FIX 2: Moved Reaction Palette to the very root of the message container and centered it */}
+                  {selectedMessageForReaction === msg._id && (
+                    <div
+                      className={`absolute left-1/2 -translate-x-1/2 ${index >= messages.length - 2 ? "bottom-full mb-1" : "top-full mt-1"
+                        } bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-[100] animate-in zoom-in-95 duration-200`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {EMOJIS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleReaction(msg._id, emoji);
+                            setSelectedMessageForReaction(null);
+                            setMobileActiveMessage(null);
+                          }}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {isGroup && !isMe && isFirstInGroup && sender && (
                     <span className="text-[10px] font-medium text-muted-foreground ml-10 mb-0.5">{sender.name}</span>
                   )}
@@ -1025,27 +1047,20 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       )}
                     </div>
 
-                    {!msg.isDeleted && editingMessageId !== msg._id && (
-                      <div className={`flex items-center gap-1 transition-opacity duration-200 mb-1 ${mobileActiveMessage === msg._id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
-                        <div className="relative">
-                          <button onClick={(e) => { e.stopPropagation(); setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"><Smile className="h-4 w-4" /></button>
-                          {selectedMessageForReaction === msg._id && (
-                            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-                              {EMOJIS.map((emoji) => (
-                                <button key={emoji} onClick={(e) => { e.stopPropagation(); handleToggleReaction(msg._id, emoji); setSelectedMessageForReaction(null); setMobileActiveMessage(null); }} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125">{emoji}</button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <button onClick={(e) => { e.stopPropagation(); setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) }); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors" title="Reply"><Reply className="h-4 w-4" /></button>
+                    <div className={`flex items-center gap-1 transition-all duration-200 mb-1 ${mobileActiveMessage === msg._id
+                        ? "opacity-100 pointer-events-auto"
+                        : "opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto"
+                      }`}>
+                      {/* The Smile button now just triggers the state change, UI is handled at the root */}
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"><Smile className="h-4 w-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) }); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors" title="Reply"><Reply className="h-4 w-4" /></button>
 
-                        {isMe && (
-                          <button onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg._id); setEditMessageContent(msg.content); }} className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-full transition-colors" title="Edit message"><Pencil className="h-4 w-4" /></button>
-                        )}
+                      {isMe && (
+                        <button onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg._id); setEditMessageContent(msg.content); }} className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-full transition-colors" title="Edit message"><Pencil className="h-4 w-4" /></button>
+                      )}
 
-                        {isMe && <button onClick={(e) => { e.stopPropagation(); setMessageToDelete(msg._id); }} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors" title="Delete message"><Trash2 className="h-4 w-4" /></button>}
-                      </div>
-                    )}
+                      {isMe && <button onClick={(e) => { e.stopPropagation(); setMessageToDelete(msg._id); }} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors" title="Delete message"><Trash2 className="h-4 w-4" /></button>}
+                    </div>
                   </div>
 
                   <div className={`text-[10px] text-muted-foreground flex items-center gap-1 ${isGroup && !isMe ? "ml-10" : "px-1"} ${msg.reactions && msg.reactions.length > 0 && !msg.isDeleted ? "mt-3" : ""}`}>
@@ -1116,8 +1131,8 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
         {!isChatReady ? (
           <div className="flex gap-2 p-4 opacity-50 pointer-events-none">
-             <Skeleton className="flex-1 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-             <Skeleton className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+            <Skeleton className="flex-1 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+            <Skeleton className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
           </div>
         ) : isBlockedByMe ? (
           <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">

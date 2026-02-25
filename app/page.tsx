@@ -55,7 +55,7 @@ export default function Home() {
   return (
     // FIX: Changed h-screen to h-[100dvh] to prevent mobile browser UI shifting
     <main className="flex h-[100dvh] bg-white dark:bg-black overflow-hidden">
-      <div className={`${activeChatId ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
+      <div className={`${activeChatId ? "hidden md:block" : "block"} w-full md:w-96 h-full shrink-0`}>
         <Sidebar onSelectChat={handleSelectChat} />
       </div>
 
