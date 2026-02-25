@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, CheckCheck, UserMinus, Reply, UserPlus } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, CheckCheck, UserMinus, Reply, UserPlus, Pin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
@@ -29,13 +29,20 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
 
-  // NEW: Fetch current user and toggle block mutation
   const currentUser = useQuery(api.users.getCurrentUser);
   const toggleBlockUser = useMutation(api.users.toggleBlockUser);
+  const togglePin = useMutation(api.conversations.togglePin);
 
   const messages = useQuery(api.messages.list, { conversationId });
   const users = useQuery(api.users.getUsers);
   const conversation = useQuery(api.conversations.getConversation, { conversationId });
+
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQueryInput, setSearchQueryInput] = useState("");
+  const [highlightedMessageId, setHighlightedMessageId] = useState<Id<"messages"> | null>(null);
+  const searchResults = useQuery(api.messages.searchMessages, 
+    isSearching && searchQueryInput.trim() ? { conversationId, query: searchQueryInput } : "skip"
+  );
 
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
@@ -63,7 +70,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showGroupInfo, setShowGroupInfo] = useState(false);
-  // NEW: State for User Info drawer
   const [showUserInfo, setShowUserInfo] = useState(false);
 
   const leaveGroupMutation = useMutation(api.conversations.leaveGroup);
@@ -78,11 +84,14 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const isPastMember = conversation?.pastMembers?.includes(user?.id || "");
   const isAdmin = conversation?.groupAdmin === user?.id;
+  const isPinned = conversation?.pinnedBy?.includes(user?.id || "");
 
-  // Derive other user info for 1-on-1 chats
   const otherUserId = !isGroup && conversation ? (conversation.participantOne === user?.id ? conversation.participantTwo : conversation.participantOne) : null;
   const otherUserObj = users?.find(u => u.clerkId === otherUserId);
-  const isBlockedByMe = otherUserId ? currentUser?.blockedUsers?.includes(otherUserId) : false;
+  
+  const isChatReady = currentUser !== undefined && users !== undefined && conversation !== undefined;
+  const isBlockedByMe = isChatReady && otherUserId ? (currentUser?.blockedUsers || []).includes(otherUserId) : false;
+  const hasBlockedMe = isChatReady && otherUserObj ? (otherUserObj.blockedUsers || []).includes(user?.id || "") : false;
 
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
@@ -96,9 +105,31 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [swipeOffset, setSwipeOffset] = useState<{ [key: string]: number }>({});
   const swipeStartRef = useRef<{ id: string; x: number } | null>(null);
 
+  // FIX 1: Automatically reset Search UI when the conversation changes!
+  useEffect(() => {
+    setIsSearching(false);
+    setSearchQueryInput("");
+    setHighlightedMessageId(null);
+  }, [conversationId]);
+
+  const scrollToMessage = (msgId: Id<"messages">) => {
+    setIsSearching(false);
+    setSearchQueryInput("");
+    const el = document.getElementById(`msg-container-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMessageId(msgId);
+      setTimeout(() => setHighlightedMessageId(null), 2500); 
+    } else {
+      toast.error("Message not loaded yet.");
+    }
+  };
+
   const handleGlobalTap = () => {
     if (mobileActiveMessage) setMobileActiveMessage(null);
     if (selectedMessageForReaction) setSelectedMessageForReaction(null);
+    // FIX 2: Close search when tapping anywhere else on the screen
+    if (isSearching) setIsSearching(false);
   };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -191,7 +222,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
       setReplyingTo(null);
     } catch (error: any) {
-      toast.error(error.message || "Failed to send message.");
+      toast.error(error.data || "Failed to send message.");
       setNewMessage(content);
     }
   };
@@ -500,28 +531,90 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </div>
       )}
 
-      <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center gap-2 shadow-sm z-10 shrink-0">
-        <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div
-          className="flex flex-col cursor-pointer hover:opacity-70 transition-opacity"
-          // UPDATED: Open group info OR user info based on chat type
-          onClick={() => isGroup ? setShowGroupInfo(true) : setShowUserInfo(true)}
-        >
-          <div className="flex items-center gap-2">
-            {isGroup && conversation?.groupImageUrl && (
-              <img src={conversation.groupImageUrl} alt="Group" className="w-6 h-6 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" />
-            )}
-            <h3 className="font-semibold text-lg">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
+      <div className="p-4 border-b bg-white dark:bg-zinc-950 flex items-center justify-between shadow-sm z-20 shrink-0">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={onClose}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div
+            className="flex flex-col cursor-pointer hover:opacity-70 transition-opacity"
+            onClick={() => isGroup ? setShowGroupInfo(true) : setShowUserInfo(true)}
+          >
+            <div className="flex items-center gap-3">
+              {isGroup ? (
+                conversation?.groupImageUrl ? (
+                  <img src={conversation.groupImageUrl} alt="Group" className="w-8 h-8 rounded-xl object-cover border border-zinc-200 dark:border-zinc-800" />
+                ) : (
+                  <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border shadow-sm">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                )
+              ) : (
+                <Avatar className="w-8 h-8 border shadow-sm">
+                  <AvatarImage src={otherUserObj?.imageUrl} />
+                  <AvatarFallback className="text-xs font-medium">{otherUserName?.charAt(0)}</AvatarFallback>
+                </Avatar>
+              )}
+              <div className="flex flex-col">
+                 <h3 className="font-semibold text-base leading-none">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
+                 <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-1">Tap here for info</span>
+              </div>
+            </div>
           </div>
-          <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-            Tap here for {isGroup ? "group" : "user"} info
-          </span>
         </div>
+
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          // FIX 3: Stop propagation so the button click doesn't instantly trigger handleGlobalTap
+          onClick={(e) => {
+            e.stopPropagation(); 
+            setIsSearching(!isSearching);
+          }} 
+          className={`text-muted-foreground transition-colors ${isSearching ? 'bg-zinc-100 dark:bg-zinc-800 text-foreground' : 'hover:text-foreground'}`}
+        >
+          <Search className="h-5 w-5" />
+        </Button>
       </div>
 
-      {/* NEW: User Info Drawer for 1-on-1 chats */}
+      {isSearching && (
+         <div 
+           className="absolute top-[76px] left-0 w-full z-30 bg-white dark:bg-zinc-950 border-b dark:border-zinc-800 p-3 shadow-md animate-in slide-in-from-top-2"
+           // FIX 4: Stop propagation so interacting with the search bar doesn't close it
+           onClick={(e) => e.stopPropagation()} 
+         >
+           <div className="relative">
+             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+             <Input 
+               autoFocus
+               placeholder="Search for messages in this chat..." 
+               value={searchQueryInput}
+               onChange={(e) => setSearchQueryInput(e.target.value)}
+               className="pl-9 bg-zinc-100 dark:bg-zinc-900 border-transparent shadow-inner"
+             />
+             {searchQueryInput && (
+               <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7 text-muted-foreground" onClick={() => setSearchQueryInput("")}>
+                 <X className="h-4 w-4" />
+               </Button>
+             )}
+           </div>
+           {searchQueryInput && searchResults && (
+             <div className="mt-3 max-h-64 overflow-y-auto bg-white dark:bg-zinc-950 border dark:border-zinc-800 rounded-xl shadow-xl divide-y dark:divide-zinc-800">
+               {searchResults.length === 0 ? (
+                  <div className="p-6 text-center text-sm font-medium text-muted-foreground">No matches found.</div>
+               ) : (
+                  searchResults.map(res => (
+                    <button key={res._id} onClick={() => scrollToMessage(res._id)} className="w-full text-left p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
+                       <span className="text-[10px] font-bold text-blue-500 mb-1 block uppercase tracking-wider">{formatMessageTime(res._creationTime)}</span>
+                       <p className="text-sm truncate text-zinc-700 dark:text-zinc-300 font-medium">{res.content}</p>
+                    </button>
+                  ))
+               )}
+             </div>
+           )}
+         </div>
+      )}
+
       {showUserInfo && !isGroup && otherUserObj && (
         <>
           <div
@@ -536,7 +629,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               <h2 className="font-bold text-lg truncate">User Info</h2>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4">
               <div className="flex flex-col items-center justify-center gap-1 mt-6">
                 <Avatar className="h-24 w-24 border shadow-sm">
                   <AvatarImage src={otherUserObj.imageUrl} />
@@ -544,12 +637,31 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 </Avatar>
                 <h3 className="font-bold text-xl mt-4 px-6 text-center">{otherUserObj.name}</h3>
               </div>
+
+              <div className="flex flex-col gap-3 mt-8">
+                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
+                 <Button 
+                  variant="outline"
+                  className="w-full justify-start h-12 rounded-xl" 
+                  onClick={async () => {
+                    try {
+                      await togglePin({ conversationId });
+                      toast.success(isPinned ? "Conversation unpinned" : "Conversation pinned");
+                    } catch (error) {
+                      toast.error("Failed to pin conversation");
+                    }
+                  }}
+                >
+                  <Pin className={`h-4 w-4 mr-3 ${isPinned ? "fill-current text-blue-500" : "text-muted-foreground"}`} />
+                  {isPinned ? "Unpin Conversation" : "Pin Conversation"}
+                </Button>
+              </div>
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
               <Button 
                 variant={isBlockedByMe ? "default" : "destructive"} 
-                className="w-full font-bold" 
+                className="w-full font-bold h-12 rounded-xl" 
                 onClick={async () => {
                   if (!otherUserId) return;
                   try {
@@ -568,7 +680,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </>
       )}
 
-      {/* Existing Group Info Drawer */}
       {showGroupInfo && isGroup && conversation && (
         <>
           <div
@@ -586,7 +697,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-
               {isAddingMember ? (
                 <div className="space-y-4 animate-in fade-in">
                   <Input
@@ -678,6 +788,23 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   </div>
 
                   <div className="space-y-3">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
+                    <Button 
+                      variant="outline"
+                      className="w-full justify-start h-12 rounded-xl mb-4" 
+                      onClick={async () => {
+                        try {
+                          await togglePin({ conversationId });
+                          toast.success(isPinned ? "Conversation unpinned" : "Conversation pinned");
+                        } catch (error) {
+                          toast.error("Failed to pin conversation");
+                        }
+                      }}
+                    >
+                      <Pin className={`h-4 w-4 mr-3 ${isPinned ? "fill-current text-blue-500" : "text-muted-foreground"}`} />
+                      {isPinned ? "Unpin Conversation" : "Pin Conversation"}
+                    </Button>
+
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
                     <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
                       {conversation.groupMembers?.map((memberId) => {
@@ -742,7 +869,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-              <Button variant="destructive" className="w-full font-bold" onClick={() => setShowLeaveModal(true)}>
+              <Button variant="destructive" className="w-full font-bold h-12 rounded-xl" onClick={() => setShowLeaveModal(true)}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Leave Group
               </Button>
@@ -798,8 +925,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
               return (
                 <div
+                  id={`msg-container-${msg._id}`}
                   key={msg._id}
-                  className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"}`}
+                  className={`flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"} ${highlightedMessageId === msg._id ? "bg-blue-500/20 dark:bg-blue-500/30 p-2 rounded-xl transition-all duration-500" : "transition-all duration-500 p-0"}`}
                   onTouchStart={(e) => handleTouchStart(e, msg._id)}
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
                   onTouchMove={(e) => handleTouchMove(e, msg._id)}
@@ -835,7 +963,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     >
                       {repliedMessage && !msg.isDeleted && (
                         <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
-                          onClick={() => { const el = document.getElementById(`msg-${repliedMessage._id}`); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+                          onClick={() => { const el = document.getElementById(`msg-container-${repliedMessage._id}`); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
                           <span className="font-bold block mb-0.5">{repliedSenderName}</span>
                           <span className="line-clamp-2">{repliedMessage.content}</span>
                         </div>
@@ -877,7 +1005,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       ) : msg.isDeleted ? (
                         <div className="flex items-center gap-2 text-xs opacity-70"><Ban className="h-3 w-3" />This message was deleted</div>
                       ) : (
-                        <div id={`msg-${msg._id}`}>
+                        <div>
                           {renderMessageContent(msg.content)}
                         </div>
                       )}
@@ -986,13 +1114,21 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           </div>
         )}
 
-        {/* UPDATED: Input area restriction based on Block status */}
-        {isBlockedByMe ? (
-          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">
+        {!isChatReady ? (
+          <div className="flex gap-2 p-4 opacity-50 pointer-events-none">
+             <Skeleton className="flex-1 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+             <Skeleton className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        ) : isBlockedByMe ? (
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">
             You blocked this user. Unblock them to send messages.
           </div>
+        ) : hasBlockedMe ? (
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">
+            You cannot reply to this conversation.
+          </div>
         ) : isPastMember ? (
-          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-sm text-muted-foreground font-medium">
+          <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">
             You left this group. You cannot send new messages.
           </div>
         ) : (

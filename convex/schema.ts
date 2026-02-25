@@ -24,7 +24,6 @@ export default defineSchema({
     groupAdmin: v.optional(v.string()),
     pastMembers: v.optional(v.array(v.string())), 
     deletedBy: v.optional(v.array(v.string())),
-    // NEW: Array to store who pinned this conversation
     pinnedBy: v.optional(v.array(v.string())),
     memberLastRead: v.optional(
       v.array(
@@ -54,7 +53,13 @@ export default defineSchema({
         })
       )
     ),
-  }).index("by_conversationId", ["conversationId"]),
+  })
+    .index("by_conversationId", ["conversationId"])
+    // NEW: Search index for finding messages!
+    .searchIndex("search_content", {
+      searchField: "content",
+      filterFields: ["conversationId"],
+    }),
   
   typingIndicators: defineTable({
     conversationId: v.id("conversations"),

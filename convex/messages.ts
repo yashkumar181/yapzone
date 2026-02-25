@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values"; // FIX: Imported ConvexError
 
-// List messages, but hide ones the user has deleted for themselves
 export const list = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
@@ -13,9 +12,26 @@ export const list = query({
       .withIndex("by_conversationId", (q) => q.eq("conversationId", args.conversationId))
       .collect();
 
-    // Filter out any messages where my ID is in the deletedFor array
     return messages.filter((msg) => !msg.deletedFor?.includes(identity.subject));
   },
+});
+
+// NEW: Full-Text Search Query
+export const searchMessages = query({
+  args: { conversationId: v.id("conversations"), query: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || !args.query) return [];
+
+    const results = await ctx.db
+      .query("messages")
+      .withSearchIndex("search_content", (q) =>
+        q.search("content", args.query).eq("conversationId", args.conversationId)
+      )
+      .take(20);
+
+    return results.filter(msg => !msg.isDeleted && !msg.deletedFor?.includes(identity.subject));
+  }
 });
 
 export const send = mutation({
@@ -26,41 +42,31 @@ export const send = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized");
-    }
+    if (!identity) throw new ConvexError("Unauthorized");
 
     const senderClerkId = identity.subject;
     const conv = await ctx.db.get(args.conversationId);
     
-    if (!conv) {
-      throw new Error("Conversation not found");
-    }
+    if (!conv) throw new ConvexError("Conversation not found");
 
-    // --- NEW: BLOCK CHECK LOGIC ---
-    // We only check for blocking in 1-on-1 DMs, not group chats
     if (!conv.isGroup) {
       const otherUserClerkId = conv.participantOne === senderClerkId ? conv.participantTwo : conv.participantOne;
 
       if (otherUserClerkId) {
-        // Fetch both the sender and the receiver's user documents
         const [senderUser, receiverUser] = await Promise.all([
           ctx.db.query("users").withIndex("by_clerkId", (q) => q.eq("clerkId", senderClerkId)).first(),
           ctx.db.query("users").withIndex("by_clerkId", (q) => q.eq("clerkId", otherUserClerkId)).first()
         ]);
 
-        // 1. Did I block them?
+        // FIX: Using ConvexError prevents the red dev crash screen!
         if (senderUser?.blockedUsers?.includes(otherUserClerkId)) {
-          throw new Error("You have blocked this user. Unblock them to send messages.");
+          throw new ConvexError("You have blocked this user. Unblock them to send messages.");
         }
-
-        // 2. Did they block me?
         if (receiverUser?.blockedUsers?.includes(senderClerkId)) {
-          throw new Error("You cannot send a message to this user.");
+          throw new ConvexError("You cannot send a message to this user.");
         }
       }
     }
-    // --- END BLOCK CHECK LOGIC ---
 
     const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
@@ -86,14 +92,14 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    if (!identity) throw new ConvexError("Unauthorized");
 
     const msg = await ctx.db.get(args.messageId);
-    if (!msg) throw new Error("Message not found");
+    if (!msg) throw new ConvexError("Message not found");
 
     if (args.type === "for_everyone") {
       if (msg.senderId !== identity.subject) {
-        throw new Error("You can only delete your own messages for everyone");
+        throw new ConvexError("You can only delete your own messages for everyone");
       }
       await ctx.db.patch(args.messageId, {
         isDeleted: true,
@@ -117,10 +123,10 @@ export const react = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    if (!identity) throw new ConvexError("Unauthorized");
 
     const msg = await ctx.db.get(args.messageId);
-    if (!msg) throw new Error("Message not found");
+    if (!msg) throw new ConvexError("Message not found");
 
     const currentReactions = msg.reactions || [];
     const myId = identity.subject;
@@ -155,17 +161,17 @@ export const edit = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    if (!identity) throw new ConvexError("Unauthorized");
 
     const message = await ctx.db.get(args.messageId);
-    if (!message) throw new Error("Message not found");
+    if (!message) throw new ConvexError("Message not found");
 
     if (message.senderId !== identity.subject) {
-      throw new Error("You can only edit your own messages");
+      throw new ConvexError("You can only edit your own messages");
     }
 
     if (message.isDeleted) {
-      throw new Error("Cannot edit a deleted message");
+      throw new ConvexError("Cannot edit a deleted message");
     }
 
     await ctx.db.patch(args.messageId, { 
