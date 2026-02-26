@@ -34,7 +34,7 @@ export default function Home() {
     updatePresence();
     const intervalId = setInterval(() => {
       updatePresence();
-    }, 30000);
+    }, 300000);
     return () => clearInterval(intervalId);
   }, [user, updatePresence]);
 
