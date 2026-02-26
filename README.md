@@ -20,16 +20,15 @@
 
 ## 📸 Platform Gallery
 
-### Desktop Experience
-| Main Messaging Interface & Group Info | Full-Text Search & Pinned Chats |
-| :---: | :---: |
-| <img src="https://placehold.co/600x350/18181b/ffffff?text=Add+Desktop+Main+Screenshot+Here" alt="Main UI" width="100%"> | <img src="https://placehold.co/600x350/18181b/ffffff?text=Add+Search/Pin+Screenshot+Here" alt="Search UI" width="100%"> |
+### 📱 Feature Showcase
 
-### Mobile Experience
-| Responsive Sidebar & Presence | Dynamic Reaction Palette (Touch) |
+| Real-Time Read Receipts | Inline Message Editing |
 | :---: | :---: |
-| <img src="https://placehold.co/300x500/18181b/ffffff?text=Add+Mobile+Sidebar+Screenshot" alt="Mobile Sidebar" width="100%"> | <img src="https://placehold.co/300x500/18181b/ffffff?text=Add+Mobile+Reaction+Screenshot" alt="Mobile Reaction" width="100%"> |
+| <img src="link-to-read-receipts.gif" width="100%"> | <img src="link-to-editing.gif" width="100%"> |
 
+| Admin Role & Group Management | In-Chat Full Text Search |
+| :---: | :---: |
+| <img src="link-to-group-admin.png" width="100%"> | <img src="link-to-search.png" width="100%"> |
 ---
 
 ## ✨ Standout Features
@@ -109,6 +108,7 @@ NEXT_PUBLIC_CONVEX_URL=your_convex_url
 **4. Start the Convex Backend**
 ```bash
 npx convex dev
+
 ```
 
 **5. Run the Next.js Development Server**
