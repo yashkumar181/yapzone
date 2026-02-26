@@ -34,24 +34,33 @@
 
 ## ✨ Standout Features
 
-YapZone was built with an obsessive focus on edge cases, mobile UX, and database security. 
+YapZone was built with an obsessive focus on edge cases, mobile UX, and database security. It delivers a comprehensive suite of features expected from enterprise-level messaging platforms.
 
-### 🛡️ Advanced Core Mechanics
-- **Full-Text Search:** Implemented `.searchIndex()` on the backend. Users can instantly search chat histories, and the UI dynamically scrolls to and highlights the queried message.
-- **Mutual Blocking Engine:** Secure backend logic utilizing `ConvexError`. If User A blocks User B, the UI completely removes the input field, and backend mutations immediately reject unauthorized API requests.
-- **Conversation Pinning:** Custom array sorting logic allows users to anchor priority 1-on-1s or Group Chats to the top of their feed.
-- **Granular Read Receipts:** Tracks exact `lastReadAt` timestamps per user, displaying intelligent "Seen" checkmarks only when appropriate.
+### 🛡️ Advanced Privacy & Organization
+- **In-Chat Message Search:** A dedicated search bar within individual chats that queries the database via `.searchIndex()` and dynamically scrolls to and highlights the searched messages in the chat feed.
+- **Mutual Blocking Engine:** Robust backend security utilizing conditional UI rendering. If a user is blocked, the input field is removed, replaced with a clear status message, and API requests are unauthorized.
+- **Chat Pinning:** Users can pin important 1-on-1s or Group Chats to the very top of their sidebar using either a right-click/long-press context menu or the User Info drawer.
+- **Sidebar Context Menus:** Desktop right-click and mobile long-press functionality to instantly Pin, Block, or Delete chats without entering them.
 
 ### 💬 Rich Messaging Experience
-- **Dynamic Reaction Palette:** A mathematically positioned emoji tooltip that calculates its distance from the screen edge to prevent UI clipping on mobile devices.
-- **Edit & Delete (For Me / Everyone):** Full CRUD control over messages. Edited messages receive an `(edited)` tag, and deleted messages are scrubbed directly from the Convex database.
-- **Contextual Replies:** Swipe-to-reply (mobile) and click-to-reply (desktop) logic that generates a scrollable reference anchor to the original message.
-- **Live Presence & Typing:** Real-time green dot indicators for online users, and accurate `[User] is typing...` states managed via Convex time-expiring documents.
+- **Rich Media Support:** Capability to upload, send, and preview images directly within chat bubbles using Convex storage and client-side resizing logic.
+- **Message Editing:** Inline editing capability where users can update sent messages, dynamically updating the database and displaying an `(edited)` tag.
+- **Message Deletion:** Support for "soft deleting" messages, replacing the content with an italicized *"This message was deleted"* notice for all participants.
+- **Dynamic Reactions:** A mathematically positioned emoji tooltip allows users to react to messages, displaying real-time reaction counts below the bubble.
+- **Smart Replies:** Support for swiping on a message (mobile) or clicking to reply, with a UI that links the reply back to the original message for context.
+
+### ⚡ Intelligent UI & Interaction
+- **Granular Read Receipts:** Visual indicators tracking exact `lastReadAt` timestamps—showing a single grey tick for sent messages and double blue ticks when the recipient has viewed them.
+- **Real-Time Typing Indicators:** Dynamic alerts showing exactly who is typing (e.g., *"Alex and Sam are typing..."*) managed via Convex time-expiring documents.
+- **Global User Discovery:** A dedicated "People on YapZone" modal accessible via a top-bar icon to instantly find and initiate chats with any registered user.
+- **Smart Auto-Scroll & Unread Badges:** Glowing blue badges in the sidebar show unread counts, clearing automatically upon opening. The chat feed auto-scrolls for new messages, offering a floating "New messages" button if scrolled up.
+- **Theme Toggle:** Full support for switching between Light and Dark modes.
 
 ### 👥 Comprehensive Group Management
-- **Admin Controls:** Creators can kick members, add new users, and update the group's avatar and description.
-- **Graceful Exits:** Users can leave a group but keep their read history, or completely scrub the group from their local view.
-
+- **Group Creation:** Users can instantly create multi-member group conversations with custom names.
+- **Admin Controls:** Group admins have exclusive authority to add new members from the platform or kick existing members from the group.
+- **Custom Group Profiles:** Admins can set group descriptions and upload custom avatars from their local device to personalize the group space.
+- **Leave/Delete Logic:** Members can gracefully exit a group while keeping their historical read view, or completely scrub the group record from their interface.
 ---
 
 ## 🛠️ Technical Architecture
