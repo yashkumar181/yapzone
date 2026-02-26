@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v, ConvexError } from "convex/values"; // FIX: Imported ConvexError
+import { v, ConvexError } from "convex/values";
 
 export const list = query({
   args: { conversationId: v.id("conversations") },
@@ -16,7 +16,7 @@ export const list = query({
   },
 });
 
-// NEW: Full-Text Search Query
+// Full-Text Search Query
 export const searchMessages = query({
   args: { conversationId: v.id("conversations"), query: v.string() },
   handler: async (ctx, args) => {
@@ -37,8 +37,9 @@ export const searchMessages = query({
 export const send = mutation({
   args: { 
     conversationId: v.id("conversations"), 
-    content: v.string(),
+    content: v.optional(v.string()), // Made optional so users can send just an image
     replyTo: v.optional(v.id("messages")), 
+    imageId: v.optional(v.id("_storage")), // The storage ID from the frontend
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -58,7 +59,6 @@ export const send = mutation({
           ctx.db.query("users").withIndex("by_clerkId", (q) => q.eq("clerkId", otherUserClerkId)).first()
         ]);
 
-        // FIX: Using ConvexError prevents the red dev crash screen!
         if (senderUser?.blockedUsers?.includes(otherUserClerkId)) {
           throw new ConvexError("You have blocked this user. Unblock them to send messages.");
         }
@@ -68,10 +68,17 @@ export const send = mutation({
       }
     }
 
+    // Convert the raw storage ID into a readable URL
+    let imageUrl = undefined;
+    if (args.imageId) {
+      imageUrl = await ctx.storage.getUrl(args.imageId);
+    }
+
     const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
       senderId: senderClerkId,
-      content: args.content,
+      content: args.content || "", // Fallback to empty string if it's just an image
+      imageUrl: imageUrl ?? undefined,
       replyTo: args.replyTo, 
     });
 
@@ -104,6 +111,7 @@ export const remove = mutation({
       await ctx.db.patch(args.messageId, {
         isDeleted: true,
         content: "", 
+        imageUrl: undefined, // Optional: scrubs the image URL if deleted for everyone
       });
     } else {
       const deletedFor = msg.deletedFor || [];
@@ -178,5 +186,11 @@ export const edit = mutation({
       content: args.newContent.trim(),
       isEdited: true 
     });
+  },
+});
+
+export const generateUploadUrl = mutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
   },
 });

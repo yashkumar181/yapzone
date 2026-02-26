@@ -38,6 +38,7 @@ export default defineSchema({
     .index("by_participantTwo", ["participantTwo"]),
 
   messages: defineTable({
+    imageUrl: v.optional(v.string()),
     conversationId: v.id("conversations"),
     senderId: v.string(),
     content: v.string(),

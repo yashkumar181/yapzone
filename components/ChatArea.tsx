@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
-import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, CheckCheck, UserMinus, Reply, UserPlus, Pin, Search } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, ArrowDown, Trash2, Ban, Smile, X, LogOut, Crown, Users, Pencil, Check, CheckCheck, UserMinus, Reply, UserPlus, Pin, Search, ImagePlus, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils";
@@ -28,6 +28,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadedChatRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentUser = useQuery(api.users.getCurrentUser);
   const toggleBlockUser = useMutation(api.users.toggleBlockUser);
@@ -40,7 +41,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [isSearching, setIsSearching] = useState(false);
   const [searchQueryInput, setSearchQueryInput] = useState("");
   const [highlightedMessageId, setHighlightedMessageId] = useState<Id<"messages"> | null>(null);
-  const searchResults = useQuery(api.messages.searchMessages,
+  const searchResults = useQuery(api.messages.searchMessages, 
     isSearching && searchQueryInput.trim() ? { conversationId, query: searchQueryInput } : "skip"
   );
 
@@ -51,6 +52,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const startTyping = useMutation(api.typing.start);
   const stopTyping = useMutation(api.typing.stop);
   const markAsRead = useMutation(api.conversations.markAsRead);
+  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
   const typingIndicators = useQuery(api.typing.getActive, { conversationId });
 
   const [newMessage, setNewMessage] = useState("");
@@ -88,7 +90,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const otherUserId = !isGroup && conversation ? (conversation.participantOne === user?.id ? conversation.participantTwo : conversation.participantOne) : null;
   const otherUserObj = users?.find(u => u.clerkId === otherUserId);
-
+  
   const isChatReady = currentUser !== undefined && users !== undefined && conversation !== undefined;
   const isBlockedByMe = isChatReady && otherUserId ? (currentUser?.blockedUsers || []).includes(otherUserId) : false;
   const hasBlockedMe = isChatReady && otherUserObj ? (otherUserObj.blockedUsers || []).includes(user?.id || "") : false;
@@ -105,6 +107,12 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   const [swipeOffset, setSwipeOffset] = useState<{ [key: string]: number }>({});
   const swipeStartRef = useRef<{ id: string; x: number } | null>(null);
 
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const mediaMessages = messages?.filter(m => m.imageUrl && !m.isDeleted) || [];
+
   useEffect(() => {
     setIsSearching(false);
     setSearchQueryInput("");
@@ -118,7 +126,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(msgId);
-      setTimeout(() => setHighlightedMessageId(null), 2500);
+      setTimeout(() => setHighlightedMessageId(null), 2500); 
     } else {
       toast.error("Message not loaded yet.");
     }
@@ -206,22 +214,38 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() && !selectedImage) return;
     if (!navigator.onLine) return toast.error("You are offline.");
 
     const content = newMessage.trim();
-    setNewMessage("");
-    stopTyping({ conversationId });
-
-    setIsAtBottom(true);
-    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    setIsUploading(true);
 
     try {
-      await sendMessage({ conversationId, content, replyTo: replyingTo?.id });
+      let imageId = undefined;
+      
+      if (selectedImage) {
+        const postUrl = await generateUploadUrl();
+        const result = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": selectedImage.type },
+          body: selectedImage,
+        });
+        const { storageId } = await result.json();
+        imageId = storageId;
+      }
+
+      await sendMessage({ conversationId, content, replyTo: replyingTo?.id, imageId });
+      
+      setNewMessage("");
+      setSelectedImage(null);
       setReplyingTo(null);
+      stopTyping({ conversationId });
+      setIsAtBottom(true);
+      setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (error: any) {
       toast.error(error.data || "Failed to send message.");
-      setNewMessage(content);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -336,6 +360,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
   };
 
   const renderMessageContent = (text: string) => {
+    if (!text) return null;
     if (!isGroup) return <p className="text-sm leading-relaxed whitespace-pre-wrap">{text}</p>;
     const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
     return (
@@ -405,6 +430,13 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
     reader.readAsDataURL(file);
   };
 
+  const handleChatImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+    }
+  };
+
   const handleKickMemberClick = (e: React.MouseEvent, memberId: string, memberName: string) => {
     e.stopPropagation();
     setMemberToKick({ id: memberId, name: memberName });
@@ -446,6 +478,15 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
   return (
     <div className="flex-1 flex flex-col h-full relative overflow-hidden" onClick={handleGlobalTap}>
+
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setPreviewImage(null)}>
+          <img src={previewImage} alt="Preview" className="max-w-full max-h-full object-contain rounded-md shadow-2xl animate-in zoom-in-95 duration-200" />
+          <Button className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full" size="icon" onClick={() => setPreviewImage(null)}>
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+      )}
 
       {messageToDelete && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
@@ -554,20 +595,20 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 </Avatar>
               )}
               <div className="flex flex-col">
-                <h3 className="font-semibold text-base leading-none">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
-                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-1">Tap here for info</span>
+                 <h3 className="font-semibold text-base leading-none">{isGroup ? conversation?.groupName || otherUserName : otherUserName}</h3>
+                 <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-1">Tap here for info</span>
               </div>
             </div>
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
+        <Button 
+          variant="ghost" 
+          size="icon" 
           onClick={(e) => {
-            e.stopPropagation();
+            e.stopPropagation(); 
             setIsSearching(!isSearching);
-          }}
+          }} 
           className={`text-muted-foreground transition-colors ${isSearching ? 'bg-zinc-100 dark:bg-zinc-800 text-foreground' : 'hover:text-foreground'}`}
         >
           <Search className="h-5 w-5" />
@@ -575,40 +616,40 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
       </div>
 
       {isSearching && (
-        <div
-          className="absolute top-[76px] left-0 w-full z-30 bg-white dark:bg-zinc-950 border-b dark:border-zinc-800 p-3 shadow-md animate-in slide-in-from-top-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              autoFocus
-              placeholder="Search for messages in this chat..."
-              value={searchQueryInput}
-              onChange={(e) => setSearchQueryInput(e.target.value)}
-              className="pl-9 bg-zinc-100 dark:bg-zinc-900 border-transparent shadow-inner"
-            />
-            {searchQueryInput && (
-              <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7 text-muted-foreground" onClick={() => setSearchQueryInput("")}>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-          {searchQueryInput && searchResults && (
-            <div className="mt-3 max-h-64 overflow-y-auto bg-white dark:bg-zinc-950 border dark:border-zinc-800 rounded-xl shadow-xl divide-y dark:divide-zinc-800">
-              {searchResults.length === 0 ? (
-                <div className="p-6 text-center text-sm font-medium text-muted-foreground">No matches found.</div>
-              ) : (
-                searchResults.map(res => (
-                  <button key={res._id} onClick={() => scrollToMessage(res._id)} className="w-full text-left p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
-                    <span className="text-[10px] font-bold text-blue-500 mb-1 block uppercase tracking-wider">{formatMessageTime(res._creationTime)}</span>
-                    <p className="text-sm truncate text-zinc-700 dark:text-zinc-300 font-medium">{res.content}</p>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
+         <div 
+           className="absolute top-[76px] left-0 w-full z-30 bg-white dark:bg-zinc-950 border-b dark:border-zinc-800 p-3 shadow-md animate-in slide-in-from-top-2"
+           onClick={(e) => e.stopPropagation()} 
+         >
+           <div className="relative">
+             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+             <Input 
+               autoFocus
+               placeholder="Search for messages in this chat..." 
+               value={searchQueryInput}
+               onChange={(e) => setSearchQueryInput(e.target.value)}
+               className="pl-9 bg-zinc-100 dark:bg-zinc-900 border-transparent shadow-inner"
+             />
+             {searchQueryInput && (
+               <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7 text-muted-foreground" onClick={() => setSearchQueryInput("")}>
+                 <X className="h-4 w-4" />
+               </Button>
+             )}
+           </div>
+           {searchQueryInput && searchResults && (
+             <div className="mt-3 max-h-64 overflow-y-auto bg-white dark:bg-zinc-950 border dark:border-zinc-800 rounded-xl shadow-xl divide-y dark:divide-zinc-800">
+               {searchResults.length === 0 ? (
+                  <div className="p-6 text-center text-sm font-medium text-muted-foreground">No matches found.</div>
+               ) : (
+                  searchResults.map(res => (
+                    <button key={res._id} onClick={() => scrollToMessage(res._id)} className="w-full text-left p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
+                       <span className="text-[10px] font-bold text-blue-500 mb-1 block uppercase tracking-wider">{formatMessageTime(res._creationTime)}</span>
+                       <p className="text-sm truncate text-zinc-700 dark:text-zinc-300 font-medium">{res.content}</p>
+                    </button>
+                  ))
+               )}
+             </div>
+           )}
+         </div>
       )}
 
       {showUserInfo && !isGroup && otherUserObj && (
@@ -635,10 +676,10 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
               </div>
 
               <div className="flex flex-col gap-3 mt-8">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
-                <Button
+                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
+                 <Button 
                   variant="outline"
-                  className="w-full justify-start h-12 rounded-xl"
+                  className="w-full justify-start h-12 rounded-xl" 
                   onClick={async () => {
                     try {
                       await togglePin({ conversationId });
@@ -652,12 +693,29 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                   {isPinned ? "Unpin Conversation" : "Pin Conversation"}
                 </Button>
               </div>
+
+              {mediaMessages.length > 0 && (
+                <div className="mt-6 flex flex-col gap-3">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Media</p>
+                  <div className="grid grid-cols-3 gap-1">
+                    {mediaMessages.map((m) => (
+                      <img 
+                        key={m._id} 
+                        src={m.imageUrl!} 
+                        alt="Media" 
+                        onClick={() => setPreviewImage(m.imageUrl!)}
+                        className="aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity bg-zinc-100 dark:bg-zinc-900" 
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-4 border-t bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
-              <Button
-                variant={isBlockedByMe ? "default" : "destructive"}
-                className="w-full font-bold h-12 rounded-xl"
+              <Button 
+                variant={isBlockedByMe ? "default" : "destructive"} 
+                className="w-full font-bold h-12 rounded-xl" 
                 onClick={async () => {
                   if (!otherUserId) return;
                   try {
@@ -785,9 +843,9 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
 
                   <div className="space-y-3">
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Settings</p>
-                    <Button
+                    <Button 
                       variant="outline"
-                      className="w-full justify-start h-12 rounded-xl mb-4"
+                      className="w-full justify-start h-12 rounded-xl mb-4" 
                       onClick={async () => {
                         try {
                           await togglePin({ conversationId });
@@ -800,6 +858,23 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       <Pin className={`h-4 w-4 mr-3 ${isPinned ? "fill-current text-blue-500" : "text-muted-foreground"}`} />
                       {isPinned ? "Unpin Conversation" : "Pin Conversation"}
                     </Button>
+
+                    {mediaMessages.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1 mb-2">Media</p>
+                        <div className="grid grid-cols-3 gap-1">
+                          {mediaMessages.map((m) => (
+                            <img 
+                              key={m._id} 
+                              src={m.imageUrl!} 
+                              alt="Media" 
+                              onClick={() => setPreviewImage(m.imageUrl!)}
+                              className="aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity bg-zinc-100 dark:bg-zinc-900" 
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Members</p>
                     <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border dark:border-zinc-800 overflow-hidden divide-y dark:divide-zinc-800">
@@ -923,7 +998,6 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                 <div
                   id={`msg-container-${msg._id}`}
                   key={msg._id}
-                  // FIX 1: Added relative and w-full so we can position absolute children directly in the center of the column
                   className={`relative w-full flex flex-col gap-1 group ${isMe ? "items-end" : "items-start"} ${isFirstInGroup ? "mt-2" : "mt-0"} ${highlightedMessageId === msg._id ? "bg-blue-500/20 dark:bg-blue-500/30 p-2 rounded-xl transition-all duration-500" : "transition-all duration-500 p-0"}`}
                   onTouchStart={(e) => handleTouchStart(e, msg._id)}
                   onTouchEnd={() => handleTouchEnd(msg._id, msg.content, sender?.name || (isMe ? "You" : otherUserName))}
@@ -933,23 +1007,23 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                     transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
                 >
-
-                  {/* FIX 2: Moved Reaction Palette to the very root of the message container and centered it */}
+                  
                   {selectedMessageForReaction === msg._id && (
-                    <div
-                      className={`absolute left-1/2 -translate-x-1/2 ${index >= messages.length - 2 ? "bottom-full mb-1" : "top-full mt-1"
-                        } bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-[100] animate-in zoom-in-95 duration-200`}
+                    <div 
+                      className={`absolute left-1/2 -translate-x-1/2 ${
+                        index >= messages.length - 2 ? "bottom-full mb-1" : "top-full mt-1"
+                      } bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-full p-1 flex gap-1 z-[100] animate-in zoom-in-95 duration-200`} 
                       onClick={(e) => e.stopPropagation()}
                     >
                       {EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleReaction(msg._id, emoji);
-                            setSelectedMessageForReaction(null);
-                            setMobileActiveMessage(null);
-                          }}
+                        <button 
+                          key={emoji} 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            handleToggleReaction(msg._id, emoji); 
+                            setSelectedMessageForReaction(null); 
+                            setMobileActiveMessage(null); 
+                          }} 
                           className="w-8 h-8 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-lg transition-transform hover:scale-125"
                         >
                           {emoji}
@@ -987,6 +1061,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                         <div className={`p-2 rounded-lg text-xs border-l-4 opacity-80 ${isMe ? "bg-white/20 dark:bg-black/10 border-white/50 dark:border-zinc-500" : "bg-black/5 dark:bg-black/30 border-black/30 dark:border-zinc-500"} cursor-pointer hover:opacity-100 transition-opacity`}
                           onClick={() => { const el = document.getElementById(`msg-container-${repliedMessage._id}`); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
                           <span className="font-bold block mb-0.5">{repliedSenderName}</span>
+                          {repliedMessage.imageUrl && <span className="block text-[10px] italic mb-1 flex items-center gap-1"><ImagePlus className="w-3 h-3"/> Photo</span>}
                           <span className="line-clamp-2">{repliedMessage.content}</span>
                         </div>
                       )}
@@ -1027,8 +1102,16 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       ) : msg.isDeleted ? (
                         <div className="flex items-center gap-2 text-xs opacity-70"><Ban className="h-3 w-3" />This message was deleted</div>
                       ) : (
-                        <div>
-                          {renderMessageContent(msg.content)}
+                        <div className="flex flex-col gap-2">
+                          {msg.imageUrl && (
+                            <img 
+                              src={msg.imageUrl} 
+                              alt="Attached media" 
+                              onClick={() => setPreviewImage(msg.imageUrl!)}
+                              className="w-full max-w-[250px] md:max-w-[300px] rounded-xl cursor-pointer hover:opacity-90 transition-opacity object-cover"
+                            />
+                          )}
+                          {msg.content && renderMessageContent(msg.content)}
                         </div>
                       )}
 
@@ -1047,15 +1130,15 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
                       )}
                     </div>
 
-                    <div className={`flex items-center gap-1 transition-all duration-200 mb-1 ${mobileActiveMessage === msg._id
-                        ? "opacity-100 pointer-events-auto"
+                    <div className={`flex items-center gap-1 transition-all duration-200 mb-1 ${
+                      mobileActiveMessage === msg._id 
+                        ? "opacity-100 pointer-events-auto" 
                         : "opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto"
-                      }`}>
-                      {/* The Smile button now just triggers the state change, UI is handled at the root */}
+                    }`}>
                       <button onClick={(e) => { e.stopPropagation(); setSelectedMessageForReaction(selectedMessageForReaction === msg._id ? null : msg._id); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"><Smile className="h-4 w-4" /></button>
                       <button onClick={(e) => { e.stopPropagation(); setReplyingTo({ id: msg._id, content: msg.content, senderName: sender?.name || (isMe ? "You" : otherUserName) }); }} className="p-1.5 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors" title="Reply"><Reply className="h-4 w-4" /></button>
 
-                      {isMe && (
+                      {isMe && !msg.imageUrl && (
                         <button onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg._id); setEditMessageContent(msg.content); }} className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-full transition-colors" title="Edit message"><Pencil className="h-4 w-4" /></button>
                       )}
 
@@ -1101,7 +1184,7 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
         </Button>
       )}
 
-      <div className="border-t bg-white dark:bg-zinc-950 relative z-20 shrink-0 pb-1">
+      <div className="border-t bg-white dark:bg-zinc-950 relative z-20 shrink-0 pb-1 flex flex-col">
         {mentionQuery !== null && isGroup && (
           <div className="absolute bottom-full left-4 mb-2 w-64 bg-white dark:bg-zinc-950 border dark:border-zinc-800 shadow-xl rounded-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
             <div className="p-2 bg-zinc-50 dark:bg-zinc-900 border-b text-xs font-bold text-muted-foreground uppercase tracking-wider">Members</div>
@@ -1129,10 +1212,26 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
           </div>
         )}
 
+        {selectedImage && (
+          <div className="mx-4 mt-3 mb-1 relative w-20 h-20 animate-in slide-in-from-bottom-2 duration-200">
+            <img 
+              src={URL.createObjectURL(selectedImage)} 
+              alt="Selected" 
+              className="w-full h-full object-cover rounded-xl border-2 border-blue-500 shadow-sm"
+            />
+            <button 
+              onClick={() => setSelectedImage(null)} 
+              className="absolute -top-2 -right-2 bg-zinc-800 text-white p-1 rounded-full shadow-md hover:bg-zinc-700 transition-colors z-10"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
         {!isChatReady ? (
           <div className="flex gap-2 p-4 opacity-50 pointer-events-none">
-            <Skeleton className="flex-1 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-            <Skeleton className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+             <Skeleton className="flex-1 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+             <Skeleton className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
           </div>
         ) : isBlockedByMe ? (
           <div className="flex items-center justify-center p-4 m-4 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-sm text-muted-foreground font-medium border border-zinc-200 dark:border-zinc-800">
@@ -1147,9 +1246,36 @@ export function ChatArea({ conversationId, otherUserName, isGroup, onClose, onSw
             You left this group. You cannot send new messages.
           </div>
         ) : (
-          <form onSubmit={handleSend} className="flex gap-2 p-4">
-            <Input value={newMessage || ""} onChange={handleInputChange} placeholder="Type a message..." className="flex-1 bg-zinc-100 dark:bg-zinc-900 border-transparent focus-visible:ring-1" />
-            <Button type="submit" size="icon" disabled={!newMessage.trim()}><Send className="h-4 w-4" /></Button>
+          <form onSubmit={handleSend} className="flex gap-2 p-4 items-end">
+            <div className="flex gap-2 flex-1 items-center bg-zinc-100 dark:bg-zinc-900 rounded-xl p-1 shadow-sm border border-transparent focus-within:border-zinc-300 dark:focus-within:border-zinc-700 transition-colors">
+              <input 
+                type="file" 
+                accept="image/*" 
+                ref={fileInputRef} 
+                onChange={handleChatImageSelect} 
+                className="hidden" 
+              />
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="icon" 
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+              >
+                <ImagePlus className="h-5 w-5" />
+              </Button>
+              <Input 
+                value={newMessage || ""} 
+                onChange={handleInputChange} 
+                placeholder="Type a message..." 
+                className="flex-1 bg-transparent border-transparent shadow-none focus-visible:ring-0 px-2" 
+                disabled={isUploading}
+              />
+            </div>
+            <Button type="submit" size="icon" disabled={(!newMessage.trim() && !selectedImage) || isUploading} className="shrink-0 rounded-xl h-11 w-11 shadow-sm">
+              {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 ml-0.5" />}
+            </Button>
           </form>
         )}
       </div>
