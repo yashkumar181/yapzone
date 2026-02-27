@@ -22,7 +22,7 @@ interface SidebarProps {
 
 const isOnline = (lastSeen?: number) => {
   if (!lastSeen) return false;
-  return Date.now() - lastSeen < 60000; 
+  return Date.now() - lastSeen < 360000; 
 };
 
 export function Sidebar({ onSelectChat }: SidebarProps) {
